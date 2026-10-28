@@ -49,14 +49,17 @@ curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/instal
 Open `http://<host>:7102`, sign in as `admin` with the factory password and
 set a new one — the change is mandatory at the first login.
 
-Recordings are stored under `/mnt/archive` by default. Set
-`OVMS_MEDIA_PATH` before starting the stack to use another location.
+Recordings are stored under `<install-dir>/archive/` by default (example:
+`/opt/openvms/archive/`). Set `OPENVMS_MEDIA_DIR` before the install, or
+`OPENVMS_MEDIA_PATH` in `.env` later, to use another location.
 
-## Instalador automatizado (Linux)
+## Automated installer (Linux)
 
-Requer **Docker Engine**, **Docker Compose v2**, `git`, `curl` e `openssl`. O instalador não modifica a instalação do Docker. As imagens da API e do frontend são construídas a partir do código do repositório.
+Requires **Docker Engine**, **Docker Compose v2**, `git`, `curl` and `openssl`.
+The installer does not change the Docker installation. It builds the API and
+frontend images from the code in this repository.
 
-Para revisar antes de executar (recomendado):
+To review the script before running it (recommended):
 
 ```bash
 curl -fsSLo openvms-install.sh https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh
@@ -64,13 +67,23 @@ less openvms-install.sh
 bash openvms-install.sh
 ```
 
-Instalação direta:
+Direct install:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
 ```
 
-O instalador clona para `/opt/openvms`, cria `.env` com senha aleatória, utiliza `/var/lib/openvms/recordings` para gravações e instala `/usr/local/bin/openvms`. Use `OPENVMS_INSTALL_DIR`, `OPENVMS_MEDIA_DIR` e `OPENVMS_REF` para personalizar ao executar um script baixado localmente. O PostgreSQL fica publicado apenas em `127.0.0.1:55433` do host. A interface é servida na porta **7102** (HTTP; configure TLS/reverse proxy antes de expor à Internet).
+The installer clones the repository to `/opt/openvms`, creates `.env` with a
+random password, and stores recordings under `<install-dir>/archive/`. It
+installs the CLI at `/usr/local/bin/openvms`. Set `OPENVMS_INSTALL_DIR`,
+`OPENVMS_MEDIA_DIR` and `OPENVMS_REF` when you run a downloaded script. The
+media directory must live on a local file system. On NFS with root squash,
+the container user (root) is mapped to `nobody` and mode 700 blocks writes
+with `EACCES`. To record to an NFS share, mount it on the host, point
+`OPENVMS_MEDIA_PATH` in `.env` to it, and set the directory permissions
+manually. PostgreSQL is published only on `127.0.0.1:55433` of the host. The
+web interface runs on port **7102** (HTTP; configure TLS or a reverse proxy
+before exposing it to the Internet).
 
 ### CLI
 
@@ -82,9 +95,16 @@ openvms start
 openvms stop
 openvms restart
 openvms update
-openvms backup /caminho/seguro/backup.tar.gz
+openvms backup /safe/path/backup.tar.gz
 ```
 
-`openvms update` exige checkout Git sem arquivos rastreados modificados, confirma a operação, atualiza por fast-forward e reconstrói a stack. **Faça backup antes de atualizar.** O comando `backup` salva o dump lógico do PostgreSQL, `config.yaml` e `.env` (que contém segredos); **não** inclui vídeos, cache de playback nem volumes auxiliares. Preserve também os volumes e arquivos de gravação em seu procedimento de disaster recovery. O instalador mantém `.env` existente e não faz `git pull` automaticamente.
+`openvms update` requires a clean Git checkout, confirms the operation,
+fast-forwards and rebuilds the stack. **Back up before you update.** The
+`backup` command saves the logical PostgreSQL dump, `config.yaml` and `.env`
+(which holds secrets). It does **not** include videos, the playback cache or
+auxiliary volumes. Keep your own procedure for volumes and recording files.
+The installer keeps an existing `.env` and never runs `git pull`
+automatically.
 
-> O instalador atual utiliza as imagens existentes definidas no Compose e executa build local; publicação de imagens pré-construídas no GHCR pode ser adicionada em uma etapa posterior.
+> The installer uses the images defined in the Compose file and builds
+> locally. Publishing pre-built images on GHCR may come later.
