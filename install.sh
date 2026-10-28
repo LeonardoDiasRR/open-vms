@@ -33,6 +33,7 @@ if [ ! -f "$INSTALL_DIR/.env" ]; then
   sudo sh -c 'umask 077; touch "$1"' sh "$INSTALL_DIR/.env"
   printf 'OPENVMS_PG_PASSWORD=%s\nOPENVMS_PG_URL=postgres://postgres:%s@127.0.0.1:55433/openvms\nOVMS_MEDIA_PATH=%s\n' "$password" "$password" "$MEDIA_DIR" | sudo tee "$INSTALL_DIR/.env" >/dev/null
   unset password
+  sudo chown "$(id -u):$(id -g)" "$INSTALL_DIR/.env"
   say "Credenciais geradas em $INSTALL_DIR/.env (permissão restrita)."
 else
   say "Preservando $INSTALL_DIR/.env."
