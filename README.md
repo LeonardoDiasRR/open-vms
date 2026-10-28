@@ -42,8 +42,8 @@ curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/instal
 ```
 
 The installer clones the repository to `/opt/openvms`, creates `.env` with a
-random password, and stores recordings under `<install-dir>/archive/`. It
-installs the CLI at `/usr/local/bin/openvms`. Set `OPENVMS_INSTALL_DIR`,
+random password, and stores recordings under `<install-dir>/archive/`. Set
+`OPENVMS_INSTALL_DIR`,
 `OPENVMS_MEDIA_DIR` and `OPENVMS_REF` when you run a downloaded script. The
 media directory must live on a local file system. On NFS with root squash,
 the container user (root) is mapped to `nobody` and mode 700 blocks writes
@@ -60,24 +60,6 @@ Recordings are stored under `<install-dir>/archive/` by default (example:
 `/opt/openvms/archive/`). Set `OPENVMS_MEDIA_DIR` before the install, or
 `OVMS_MEDIA_PATH` in `.env` later, to use another location.
 
-## CLI
-
-```bash
-openvms status
-openvms logs api
-openvms doctor
-openvms start
-openvms stop
-openvms restart
-openvms update
-openvms backup /safe/path/backup.tar.gz
-```
-
-`openvms update` requires a clean Git checkout, confirms the operation,
-fast-forwards and rebuilds the stack. **Back up before you update.** The
-`backup` command saves the logical PostgreSQL dump, `config.yaml` and `.env`
-(which holds secrets). It does **not** include videos, the playback cache or
-auxiliary volumes. Keep your own procedure for volumes and recording files.
 The installer keeps an existing `.env` and never runs `git pull`
 automatically.
 
