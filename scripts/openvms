@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+DIR="${OPENVMS_INSTALL_DIR:-/opt/openvms}"
+usage() {
+  printf 'OpenVMS CLI\nUso: openvms {install|start|stop|restart|status|logs|update|doctor|backup|help}\n'
+}
+die() { printf 'Erro: %s\n' "$*" >&2; exit 1; }
+cmd="${1:-help}"; shift || true
+if [ "$cmd" = install ]; then
+  command -v curl >/dev/null || die "curl não encontrado."
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' EXIT
+  curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh -o "$tmp"
+  bash "$tmp" "$@"
+  exit
+fi
+case "$cmd" in help|-h|--help) usage; exit;; start|stop|restart|status|logs|update|doctor|backup) ;; *) usage; exit 2;; esac
+[ -f "$DIR/docker-compose.yml" ] || die "Instalação não encontrada em $DIR. Use: openvms install"
+command -v docker >/dev/null || die "Docker indisponível."
+if docker info >/dev/null 2>&1; then D=(docker)
+elif sudo -v && sudo docker info >/dev/null 2>&1; then D=(sudo docker)
+else die "Sem acesso ao daemon Docker."; fi
+compose() { (cd "$DIR" && "${D[@]}" compose "$@"); }
+case "$cmd" in
+  start) compose up -d;;
+  stop) compose stop;;
+  restart) compose restart;;
+  status) compose ps;;
+  logs) compose logs --tail=100 "$@";;
+  doctor)
+    printf 'Docker: '; "${D[@]}" --version
+    printf 'Compose: '; "${D[@]}" compose version
+    printf 'Configuração: '; compose config --quiet && echo OK
+    printf 'Serviços:\n'; compose ps
+    ;;
+  update)
+    command -v git >/dev/null || die "git indisponível."
+    [ -z "$(sudo git -C "$DIR" status --porcelain)" ] || die "Checkout modificado; preserve as alterações antes de atualizar."
+    printf 'Atualizar OpenVMS em %s? [s/N] ' "$DIR"
+    read -r answer
+    case "$answer" in s|S|sim|SIM) ;; *) echo "Cancelado."; exit 0;; esac
+    sudo git -C "$DIR" pull --ff-only
+    compose up -d --build
+    ;;
+  backup)
+    command -v tar >/dev/null || die "tar indisponível."
+    dest="${1:-$PWD/openvms-backup-$(date +%Y%m%d-%H%M%S).tar.gz}"
+    [ ! -e "$dest" ] || die "O arquivo já existe: $dest"
+    printf 'Backup de configuração e banco PostgreSQL (não inclui gravações).\n'
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    compose exec -T postgres pg_dump -U postgres -d openvms > "$tmp/database.sql"
+    sudo cp "$DIR/config.yaml" "$tmp/config.yaml"
+    sudo cp "$DIR/.env" "$tmp/.env"
+    tar -czf "$dest" -C "$tmp" .
+    chmod 600 "$dest"
+    echo "Backup: $dest (contém credenciais; proteja este arquivo)."
+    ;;
+esac
