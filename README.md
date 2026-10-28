@@ -46,33 +46,6 @@ Requirements: a Linux host with Docker and Docker Compose.
 curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
 ```
 
-Open `http://<host>:7102`, sign in as `admin` with the factory password and
-set a new one — the change is mandatory at the first login.
-
-Recordings are stored under `<install-dir>/archive/` by default (example:
-`/opt/openvms/archive/`). Set `OPENVMS_MEDIA_DIR` before the install, or
-`OPENVMS_MEDIA_PATH` in `.env` later, to use another location.
-
-## Automated installer (Linux)
-
-Requires **Docker Engine**, **Docker Compose v2**, `git`, `curl` and `openssl`.
-The installer does not change the Docker installation. It builds the API and
-frontend images from the code in this repository.
-
-To review the script before running it (recommended):
-
-```bash
-curl -fsSLo openvms-install.sh https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh
-less openvms-install.sh
-bash openvms-install.sh
-```
-
-Direct install:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
-```
-
 The installer clones the repository to `/opt/openvms`, creates `.env` with a
 random password, and stores recordings under `<install-dir>/archive/`. It
 installs the CLI at `/usr/local/bin/openvms`. Set `OPENVMS_INSTALL_DIR`,
@@ -85,7 +58,14 @@ manually. PostgreSQL is published only on `127.0.0.1:55433` of the host. The
 web interface runs on port **7102** (HTTP; configure TLS or a reverse proxy
 before exposing it to the Internet).
 
-### CLI
+Open `http://<host>:7102`, sign in as `admin` with the factory password and
+set a new one — the change is mandatory at the first login.
+
+Recordings are stored under `<install-dir>/archive/` by default (example:
+`/opt/openvms/archive/`). Set `OPENVMS_MEDIA_DIR` before the install, or
+`OPENVMS_MEDIA_PATH` in `.env` later, to use another location.
+
+## CLI
 
 ```bash
 openvms status
