@@ -33,11 +33,6 @@ camera only ever sees one client, so its load and the network traffic stay
 flat no matter how many people are watching. Streams start on demand —
 nothing pulls a camera when nobody is watching it.
 
-## Known limitations
-
-Use Chrome. Other browsers need an extension or specific hardware to decode
-H.265 camera streams.
-
 ## Installation
 
 Requirements: a Linux host with Docker and Docker Compose.
@@ -53,7 +48,7 @@ installs the CLI at `/usr/local/bin/openvms`. Set `OPENVMS_INSTALL_DIR`,
 media directory must live on a local file system. On NFS with root squash,
 the container user (root) is mapped to `nobody` and mode 700 blocks writes
 with `EACCES`. To record to an NFS share, mount it on the host, point
-`OPENVMS_MEDIA_PATH` in `.env` to it, and set the directory permissions
+`OVMS_MEDIA_PATH` in `.env` to it, and set the directory permissions
 manually. PostgreSQL is published only on `127.0.0.1:55433` of the host. The
 web interface runs on port **7102** (HTTP; configure TLS or a reverse proxy
 before exposing it to the Internet).
@@ -63,7 +58,7 @@ set a new one — the change is mandatory at the first login.
 
 Recordings are stored under `<install-dir>/archive/` by default (example:
 `/opt/openvms/archive/`). Set `OPENVMS_MEDIA_DIR` before the install, or
-`OPENVMS_MEDIA_PATH` in `.env` later, to use another location.
+`OVMS_MEDIA_PATH` in `.env` later, to use another location.
 
 ## CLI
 
@@ -88,3 +83,8 @@ automatically.
 
 > The installer uses the images defined in the Compose file and builds
 > locally. Publishing pre-built images on GHCR may come later.
+
+## Known limitations
+
+Use Chrome. Other browsers need an extension or specific hardware to decode
+H.265 camera streams.
