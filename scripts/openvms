@@ -35,7 +35,7 @@ case "$cmd" in
     ;;
   update)
     command -v git >/dev/null || die "git indisponível."
-    [ -z "$(sudo git -C "$DIR" status --porcelain)" ] || die "Checkout modificado; preserve as alterações antes de atualizar."
+    [ -z "$(sudo git -C "$DIR" status --porcelain --untracked-files=no)" ] || die "Checkout modificado; preserve as alterações antes de atualizar."
     printf 'Atualizar OpenVMS em %s? [s/N] ' "$DIR"
     read -r answer
     case "$answer" in s|S|sim|SIM) ;; *) echo "Cancelado."; exit 0;; esac
@@ -50,8 +50,8 @@ case "$cmd" in
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
     compose exec -T postgres pg_dump -U postgres -d openvms > "$tmp/database.sql"
-    sudo cp "$DIR/config.yaml" "$tmp/config.yaml"
-    sudo cp "$DIR/.env" "$tmp/.env"
+    sudo cat "$DIR/config.yaml" > "$tmp/config.yaml"
+    sudo cat "$DIR/.env" > "$tmp/.env"
     tar -czf "$dest" -C "$tmp" .
     chmod 600 "$dest"
     echo "Backup: $dest (contém credenciais; proteja este arquivo)."
