@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 REPO_URL="https://github.com/LeonardoDiasRR/open-vms.git"
 INSTALL_DIR="${OPENVMS_INSTALL_DIR:-/opt/openvms}"
-MEDIA_DIR="${OPENVMS_MEDIA_DIR:-/var/lib/openvms/recordings}"
+MEDIA_DIR="${OPENVMS_MEDIA_DIR:-$INSTALL_DIR/archive}"
 BRANCH="${OPENVMS_REF:-main}"
 say() { printf '\033[1;36m[OpenVMS]\033[0m %s\n' "$*"; }
 die() { printf 'Erro: %s\n' "$*" >&2; exit 1; }
@@ -39,6 +39,7 @@ else
   say "Preservando $INSTALL_DIR/.env."
 fi
 sudo mkdir -p "$MEDIA_DIR"
+sudo chown "$(id -u):$(id -g)" "$MEDIA_DIR"
 sudo chmod 700 "$MEDIA_DIR"
 if [ ! -e "$INSTALL_DIR/config.yaml" ]; then
   die "Arquivo config.yaml ausente."
