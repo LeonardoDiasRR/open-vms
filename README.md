@@ -43,9 +43,7 @@ H.265 camera streams.
 Requirements: a Linux host with Docker and Docker Compose.
 
 ```bash
-git clone https://github.com/LeonardoDiasRR/open-vms.git
-cd open-vms
-docker compose up -d --build
+curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
 ```
 
 Open `http://<host>:7102`, sign in as `admin` with the factory password and
