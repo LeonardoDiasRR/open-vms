@@ -24,3 +24,6 @@ CONSTITUTION.md
 deploy/apply-5-specs.sh
 data/
 playback/
+
+# Segredos locais do instalador
+.env
