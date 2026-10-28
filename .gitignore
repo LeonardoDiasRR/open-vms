@@ -27,3 +27,6 @@ playback/
 
 # Segredos locais do instalador
 .env
+
+# Gravações criadas em runtime pelo instalador
+/archive/
