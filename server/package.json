@@ -1,0 +1,8 @@
+{
+  "name": "openvms-server",
+  "private": true,
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "pg": "^8"
+  }
+}

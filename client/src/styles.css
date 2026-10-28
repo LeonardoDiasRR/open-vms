@@ -1,0 +1,1405 @@
+@import "tailwindcss";
+
+@theme {
+  /* Ponte para o vocabulario shadcn: toda entrada e var() do :root (fonte unica dos valores).
+     Os hex vivem em :root; aqui nenhum valor literal. */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-popover: var(--modal-menu);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--bg);
+  --color-secondary: var(--control);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--panel);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--hovered-row);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--text);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--accent);
+  --color-warn: var(--warn);
+  /* Nomes legados do projeto: mantidos (M4 proibe novos USOS, nao a existencia). */
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-borda: var(--border);
+  --color-texto: var(--text);
+  --color-danger: var(--danger);
+}
+
+:root {
+  /* Fonte unica dos valores (M1). Nenhum hex fora deste bloco e do @theme. */
+  --bg: #0f1115;
+  --panel: #161a20;
+  --border: #232a33;
+  --text: #e6e9ee;
+  --muted: #8b95a3;
+  --accent: #16b981;
+  --accent-hover: #1ad191; /* plan 2026-10-26: hover do CTA do login */
+  --warn: #d9a13b;
+  --danger: #e05252;
+  --control: #1d232b;
+  --input: #0c0e12;
+  --active-bg: #10312a;
+  --selected-row: #1b2129;
+  --hovered-row: #26303c;
+  --hover-border: #38424f;
+  --modal-menu: #1b1f27;
+  --banner-warning: #3a2418;
+  --scene: #0b0d11;
+  --video: #000000;
+  --off: #14171c;
+  --painel-menu: #10141a;
+  --on-accent: #04120d;
+  --branco: #fff;
+  --danger-forte: #f85149;
+  --scrim: #000c;
+  --scrim-baixo: #000a;
+  --trilha-a: #1c222a;
+  --trilha-b: #14181e;
+  --trilha-warn-a: #6b5316;
+  --trilha-warn-b: #3a2d0d;
+  --icone-vazio: #ffffff12;
+  --focus: var(--accent);
+  /* Escala do design system (spec 2026-10-17, M4). Valores medidos do DESIGN.md; codigo NOVO usa estes
+     nomes. Os literais antigos com valor IDENTICO foram migrados na mesma passada (3px -> --radius-sm,
+     4px -> --radius-md, 2px -> --radius-xs, 6px -> --radius-lg, 40 -> --z-overlay, 0.8s -> --dur-spin).
+     O que NAO casa exatamente continua literal de proposito: .15s nao e --dur-fast (120ms), e 10px /
+     50% / `4px 4px 0 0` nao tem token — trocar ali mudaria animacao e desenho sem necessidade. */
+  --space-xxs: 2px; --space-xs: 4px; --space-sm: 6px; --space-md: 8px;
+  --space-lg: 10px; --space-xl: 14px; --space-xxl: 18px;
+  --radius-xs: 2px; --radius-sm: 3px; --radius-md: 4px; --radius-lg: 6px;
+  --z-panel: 1; --z-overlay: 40; --z-menu: 50; --z-dialog: 60;
+  --dur-fast: 120ms; --dur-spin: 800ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--control);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+button:hover { border-color: var(--hover-border); }
+button.active { background: var(--active-bg); border-color: var(--accent); color: var(--accent); }
+
+input {
+  font: inherit;
+  color: var(--text);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  width: 100%;
+}
+
+input:focus { border-color: var(--accent); }
+
+/* spec 2026-10-19 (padrao-select): o select ganha o padrao da casa como espelho do bloco input
+   acima. Regra em ELEMENTO (os 5 usos do app ganham sem mudar markup — precedente button{}/
+   input{}). background-image so DEPOIS do shorthand background, que zera a imagem; ordem fixada. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: var(--text);
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 26px 6px 8px;
+  width: 100%;
+  /* ponytail: data-URI nao le var(); o codigo e o valor atual de --muted (linha 38 do :root) */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%238b95a3' stroke-width='1.5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+select:focus { border-color: var(--accent); }
+
+/* spec 2026-10-19 (idioma): o select da topbar encolhe para o conteudo. Classe vence o
+   seletor de elemento da regra global acima; padding de 3px casa a altura com o botao de
+   usuario (medido: 26,8 px contra 26 px). */
+.lang-select { width: auto; padding: 3px 26px 3px 8px; }
+
+/* lista aberta: navegador sem ::picker mantem o popup nativo (color-scheme: dark ja cobre o
+   fechado em qualquer motor). option:checked leva `none` para nao herdar a seta do select. */
+::picker(select) {
+  background: var(--input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  padding: 4px;
+}
+option { padding: 6px 8px; }
+option:checked { background: var(--selected-row) none; color: var(--text); }
+option:hover { background: var(--selected-row); }
+
+/* M2: foco visivel unico do shell. O `outline: none` do input saiu — ele era o que matava o
+   indicador de foco no teclado (DESIGN.md P0-2).
+   O catalogo /design (M4) renderiza FORA do shell: o segundo seletor leva o mesmo anel para dentro dele. */
+.shell :is(button, a, input, select, [tabindex]):focus-visible,
+[data-design] :is(button, a, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
+
+.muted { color: var(--muted); }
+
+.dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 6px;
+}
+
+/* ---- shell ---- */
+.shell {
+  height: 100vh;
+  display: grid;
+  /* ponytail: largura dos paineis em variavel — recolher e UMA classe no .shell, sem
+     tocar em nenhuma outra regra (spec 2026-10-16, secao 5). */
+  --col-esq: 220px;
+  --col-dir: 260px;
+  /* spec 2026-10-18: as DUAS trilhas de 2px sao o espaco da alca. O scrollbar de qualquer regiao que
+     rola fica DENTRO da coluna do painel; a trilha da alca nao tem nada sobreposto — e a garantia
+     estrutural que a sonda D mediu (a prioridade de hit sobre o scrollbar e do engine, nao nossa). */
+  grid-template-columns: var(--col-esq) 2px 1fr 2px var(--col-dir);
+  grid-template-rows: 40px 1fr 24px;
+  grid-template-areas:
+    'topbar topbar topbar topbar topbar'
+    'sidebar alca-esq scene alca-dir rightpanel'
+    'statusbar statusbar statusbar statusbar statusbar';
+  gap: 1px;
+  background: var(--border);
+}
+
+.topbar { grid-area: topbar; }
+.sidebar { grid-area: sidebar; }
+.scene { grid-area: scene; }
+.rightpanel { grid-area: rightpanel; }
+.statusbar { grid-area: statusbar; }
+
+.shell > * { background: var(--panel); }
+
+/* A · topbar */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 10px;
+}
+
+.brand { font-weight: 600; letter-spacing: .3px; }
+
+.modes { display: flex; gap: 2px; }
+
+.topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* B · sidebar */
+.sidebar { display: flex; flex-direction: column; overflow: hidden; }
+
+/* faixa recolhida: 32px so com o alternador */
+.shell.rec-esq { --col-esq: 32px; }
+.shell.rec-dir { --col-dir: 32px; }
+
+/* ---- divisor arrastavel dos paineis (spec 2026-10-17, item 1.2; trilha propria 2026-10-18; sem linha
+   visivel desde 2026-10-18-divisor-sem-linha-visivel) ----
+   A alca ocupa a PROPRIA trilha de 2px do grid do shell (colunas 2 e 4). Nada e sobreposto a ela — em
+   particular o scrollbar do painel, que continua 100% funcional. A faixa VISIVEL e de 4px: os 2px da
+   trilha mais os 2 gaps de 1px, cobertos por `margin-inline: -1px` e pintados na cor do painel — zero
+   linha vertical entre painel e cena (o overflow da margem cabe EXATAMENTE nos gaps: painel termina no
+   fim da coluna 1, cena comeca no inicio da coluna 3; medido na sonda). unico estado visivel: hover/foco
+   acende uma linha central de 2px var(--accent) via background-image, mantendo a cor de baixo (transparente
+   deixaria o var(--border) do shell aparecer de novo). O `::after` soma 8px de acerto para o lado da CENA.
+   `touch-action: none`: o gesto e de ponteiro, nao de rolagem. */
+.alca-painel {
+  position: relative; width: 4px; margin-inline: -1px; cursor: col-resize;
+  background-color: var(--panel); background-image: none; touch-action: none;
+}
+.alca-esq { grid-area: alca-esq; }
+.alca-dir { grid-area: alca-dir; }
+.alca-painel:hover, .alca-painel:focus-visible {
+  background-color: var(--panel);
+  /* ponytail: stops em 1px/3px = centro da faixa de 4px com linha de 2px; a guarda nao atravessa parenteses de calc. */
+  background-image: linear-gradient(to right, transparent 1px,
+    var(--accent) 1px, var(--accent) 3px, transparent 3px);
+}
+/* Area de acerto que sobra para a CENA, que nao tem regiao de rolagem: 12px de largura, 4px sobre a
+   alca e 8px sobre a cena. Nunca para o lado do painel — la o scrollbar precisa do ponteiro inteiro. */
+.alca-painel::after { content: ''; position: absolute; top: 0; bottom: 0; width: 12px; }
+.alca-esq::after { right: -8px; }
+.alca-dir::after { left: -8px; }
+
+/* a UNICA regiao de rolagem da sidebar (o overflow saiu do .tree, abaixo) */
+.sidebar-rolagem { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* Busca no cabecalho (spec 2026-10-17-busca-cabecalho-sidebar): a linha e [busca][alternador].
+   O space-between saiu — quem empurra o alternador para a direita e o flex: 1 da busca; os
+   estados recolhidos seguem recentrando com justify-content: center. O uppercase/muted eram
+   dos spans removidos: no input vira caixa-alta da digitacao, entao saem junto. */
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Busca do SearchField — o componente nao carrega estilo e estas classes NUNCA existiram
+   (spec busca-cabecalho, "Achado da exploracao"). O visual base do campo vem da regra `input`
+   do arquivo; aqui e so geometria e marcador. Altura 28px: ESCOLHA — a linha MEDE 37px no build
+   servido (28 do campo + 4/4 de padding + 1 de borda), contra 31px da linha antiga (+6px). */
+.busca { position: relative; flex: 1 1 auto; min-width: 0; }
+.busca-campo { width: 100%; height: 28px; font-size: 12px; padding: 0 26px; }
+.busca-icone { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.busca-limpar { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; padding: 0; border: 0; background: none; color: var(--muted); }
+.busca-limpar:hover { color: var(--text); border-color: transparent; }
+
+/* ponytail: sem overflow aqui — quem rola e a .sidebar-rolagem. Com overflow, esta lista
+   era o unico filho encolhivel da coluna flex e sumia (8px; spec secao 1). */
+.tree { list-style: none; margin: 0; padding: 4px 0; }
+
+.tree li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+/* hover so na linha sob o mouse: camera pinta o proprio li; pasta pinta so .tree-cabeca,
+   nunca a subarvore (o li da pasta envolve os filhos por causa do flex-wrap) */
+/* hover da camera (item 1.6): fundo mais claro que o da marcacao + a barra de acento que
+   .tree li ja reserva — a linha sob o mouse nao se confunde com a linha marcada (var(--selected-row)) */
+.tree-camera:hover { background: var(--hovered-row); border-left-color: var(--accent); }
+/* marcada SOB O MOUSE: mais clara que o hover simples (var(--hovered-row)) e distinta do repouso da
+   marcada (var(--selected-row), de .tree li.sel) — sem este :hover a regra abaixo vencia em TODOS os
+   estados (0,3,1 contra 0,2,0) e a marcada perdia a cor propria no repouso (medido 2026-10-15) */
+.tree li.sel.tree-camera:hover { background: rgba(255, 255, 255, 0.22); }
+.tree-grupo > .tree-cabeca:hover { background: var(--selected-row); }
+.tree li.sel { background: var(--selected-row); border-left-color: var(--accent); }
+
+.badge {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  /* spec 2026-10-16: vazia por padrao (contorno na cor do estado) e .cheia quando GRAVA.
+     box-shadow inset em vez de border: cheia e vazia medem os mesmos 7px, sem reflow */
+  background: transparent;
+  box-shadow: inset 0 0 0 1px currentColor;
+  color: var(--muted);
+  flex: none;
+}
+
+.badge.online { color: var(--accent); }
+.badge.provisioning { color: var(--warn); }
+.badge.error { color: var(--danger); }
+.badge.cheia { background: currentColor; }
+/* spec 2026-10-27 (camera-ativa 4.3): inactive camera is gray even when online — the same neutral
+   of offline (--muted). Declared last so it wins over the state colors at equal specificity. */
+.badge.inativa { color: var(--muted); }
+
+/* ---- sidebar em arvore: pastas, "..." e area de soltar (padrao NX) ---- */
+.tree-row { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 0; border-radius: var(--radius-md); cursor: pointer; }
+.tree-row.sel { background: rgba(255, 255, 255, 0.08); }
+.tree li.tree-grupo, .tree li.tree-device { font-weight: 500; flex-wrap: wrap; padding: 0; } /* vence o padding de .tree li (4px 10px); o DEVICE precisa do wrap: sem ele .tree-cabeca e .tree-filhos (ambos flex-basis 100%) ficam lado a lado e as filhas saem para a direita do titulo */
+.tree-cabeca { display: flex; align-items: center; gap: 6px; flex-basis: 100%; padding: 4px 10px; border-radius: var(--radius-md); } /* o padding que o li tinha */
+.tree-cabeca.drop-alvo { outline: 1px dashed var(--accent); background: rgba(63, 185, 80, 0.12); } /* so a linha da pasta */
+.tree-cabeca.sel { background: rgba(255, 255, 255, 0.08); } /* pasta marcada: so a linha da pasta */
+.tree-camera .tree-alca { width: 14px; }              /* alinha camera com o nome da pasta */
+.tree-alca { width: 14px; text-align: center; opacity: 0.75; flex: none; user-select: none; }
+/* spec 2026-10-19 (alca-inativa-sob-filtro 3.4): inativo = opacidade, o indicador da casa */
+.tree-alca.inativa { opacity: 0.25; pointer-events: none; }
+.cam-dots:disabled, .tree-secao .cam-dots.ativo:disabled { opacity: 0.25; }   /* a 2a forma vence .ativo (0,3,0) */
+.tree-icone { flex: none; opacity: 0.85; }
+.tree-nome { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* spec 2026-10-27 (camera-ativa 4.3): inactive camera name: the same muted text of .muted */
+.tree-nome.inativa { color: var(--muted); }
+.tree-filhos { list-style: none; margin: 0; padding-left: 14px; flex-basis: 100%; } /* ocupa a linha inteira, empurrando o que vem antes para cima */
+.tree-raiz { min-height: 26px; margin-top: 2px; border-top: 1px dashed rgba(255, 255, 255, 0.08); } /* faixa neutra e sempre visivel */
+.tree-filhos .tree-filhos { padding-left: 14px; }     /* aninhamento sem limite */
+.cam-dots { flex: none; width: 22px; height: 18px; line-height: 1; padding: 0; opacity: 0.45;
+  background: transparent; border: 0; color: inherit; cursor: pointer; border-radius: var(--radius-sm); }
+.tree-row:hover .cam-dots, .tree-row.sel .cam-dots, .cam-dots:focus-visible { opacity: 1; }
+.cam-dots:hover { background: rgba(255, 255, 255, 0.12); }
+.cam-menu { position: fixed; z-index: var(--z-overlay); transform: translateX(-100%); min-width: 190px; padding: 4px;
+  background: var(--modal-menu); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45); display: flex; flex-direction: column; }
+.cam-menu-item { text-align: left; padding: 6px 10px; background: transparent; border: 0; color: inherit;
+  border-radius: var(--radius-md); cursor: pointer; }
+.cam-menu-item:hover, .cam-menu-item:focus-visible { background: rgba(255, 255, 255, 0.1); }
+.cam-menu-item.danger { color: var(--danger-forte); }
+
+/* C · cena */
+.scene {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  /* ponytail: sem esta regra a trilha do meio do .shell (1fr = minmax(auto, 1fr)) adota o
+     min-content do palco como minimo, e esse minimo inclui a altura intrinseca da midia de CADA
+     linha. Com 5 linhas a grade media 778 px numa janela de 613 px, a ultima linha caia abaixo do
+     limite e a pagina inteira ganhava rolagem (medido em 2026-10-16). A trilha volta a 1fr e as
+     linhas dividem a altura disponivel. */
+  min-height: 0;
+  background: var(--scene);
+}
+
+.banner {
+  background: var(--banner-warning);
+  border-bottom: 1px solid var(--warn);
+  color: var(--warn);
+  padding: 5px 10px;
+}
+
+/* D · painel direito */
+.rightpanel { padding: 10px; overflow: auto; }
+
+.panel dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+}
+
+.panel dt { color: var(--muted); }
+.panel dd { margin: 0; }
+
+/* E · statusbar */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.statusbar .ok { color: var(--accent); }
+.statusbar .warn { color: var(--warn); }
+
+/* dropdown do usuario (spec 2026-10-18) — mesma superficie do .cam-menu; o --z-overlay vale 40
+   (abaixo do toast 60 e do dialog 60 da pilha) */
+.user-menu-wrap { position: relative; }
+.user-menu-btn { display: inline-flex; align-items: center; padding: 4px 6px; }
+.user-menu {
+  position: absolute; top: 100%; right: 0; z-index: var(--z-overlay);
+  min-width: 220px; padding: 4px;
+  background: var(--modal-menu); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column;
+}
+.user-menu-head { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex; flex-direction: column; gap: 4px; }
+.user-menu-head > div { display: flex; align-items: center; gap: 8px; }
+.user-menu-head .muted { color: var(--muted); }
+.user-menu-item {
+  display: flex; align-items: center; gap: 8px; text-align: left; padding: 6px 10px;
+  background: transparent; border: 0; color: inherit;
+  border-radius: var(--radius-md); cursor: pointer;
+}
+.user-menu-item:hover, .user-menu-item:focus-visible { background: rgba(255, 255, 255, 0.1); }
+.user-menu svg { flex: none; }
+
+/* T1 · login — identidade OpenVMS aprovada */
+.login {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--bg);
+}
+
+.login-language {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  z-index: 1;
+}
+
+.login-language .lang-select {
+  color: var(--text);
+  background-color: var(--panel);
+  border-color: var(--border);
+}
+
+.login-language select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .login { padding-top: 72px; }
+  .login-language { top: 12px; right: 16px; }
+}
+
+.login-content {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.login-brand {
+  width: 90%;
+  color: var(--accent);
+}
+
+.login-brand svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.login-brand-open { fill: var(--text); }
+.login-brand-vms { fill: var(--accent); }
+
+.login-card {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.login-heading { text-align: center; margin-bottom: 4px; }
+.login-heading h1 { margin: 0; font-size: 17px; font-weight: 600; color: var(--text); }
+.login-heading p { margin: 6px 0 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.login-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.login-footer svg { color: var(--accent); flex: none; }
+
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+
+/* plan 2026-10-26: o ">" tira o olho da senha do alcance desta regra (ele recebia margin-top 4px e
+   caía 4 px abaixo do centro) e o submit ganha o padding do CTA aprovado. O hover usa token. */
+.login-card > button { padding: 10px; margin-top: 4px; }
+.login-card > button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.login-error { margin: 0; color: var(--danger); font-size: 12px; }
+
+/* olho que revela a senha, dentro do proprio campo (login e modal de dispositivos) */
+.pw-field { position: relative; display: block; }
+.pw-field input { padding-right: 32px; }
+.pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+.pw-toggle:hover { color: var(--text); border: 0; }
+.pw-toggle svg { width: 14px; height: 14px; display: block; }
+
+/* F · ao vivo + mural */
+.mode-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.spacer-left { margin-left: auto; }
+
+.slot-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* celula de video */
+/* A celula e a TRILHA (ou a tela, em tela cheia) e nao pinta mais fundo nenhum: quem pinta e a
+   caixa da imagem (.cell-quadro). O `container-type: size` e o que da o `100cqw`/`100cqh` da
+   caixa sem nenhum JS medindo elemento (spec 2026-10-17, secao 5). */
+.stream-cell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  container-type: size;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border-radius: var(--radius-sm);
+}
+
+/* A caixa da imagem: o maior retangulo no formato da transmissao ativa que cabe na celula,
+   centralizado. `--formato` e um numero SEM unidade (largura/altura) porque entra numa
+   multiplicacao de calc(). Sem `--formato` nao ha valor de reserva aqui de proposito: quem
+   decide o que fazer quando o formato e desconhecido e a classe `.cheia` (um dono so). */
+.cell-quadro {
+  aspect-ratio: var(--formato);
+  width: min(100cqw, calc(100cqh * var(--formato)));
+  background: var(--video);
+  position: relative;
+  overflow: hidden;
+}
+.cell-quadro.cheia { width: 100%; height: 100%; aspect-ratio: auto; }
+
+/* video HLS: a caixa ja tem o formato da transmissao, entao o `contain` aqui nao deixa barra */
+.cell-quadro video { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* quem esta fora do ar e a IMAGEM, nao a trilha (spec, secao 5) */
+.stream-cell.off { background: transparent; }
+.cell-quadro.off { background: var(--off); }
+
+.no-signal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 11px;
+}
+
+/* spec 2026-10-15: o X vermelho central e a marca de "Sem sinal" (paridade com o cliente NX) */
+.no-signal-x {
+  font-size: 34px;
+  line-height: 1;
+  color: var(--danger);
+}
+
+/* intervalo transitorio da celula (plano do spinner): ha perfil escolhido e ainda nao veio
+   quadro. Mesmo desenho do aviso de falha (inset:0, coluna centrada), com a cor neutra da
+   mensagem em vez do vermelho. O arco usa --accent, a cor de acao do app. */
+.cell-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.cell-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: girar var(--dur-spin) linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+/* quem pediu menos movimento recebe a mensagem sem rotacao — o texto e o sinal real */
+@media (prefers-reduced-motion: reduce) { .cell-spinner { animation: none; } }
+
+.cell-overlay {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  background: linear-gradient(var(--scrim), transparent);
+  font-size: 11px;
+}
+.stream-cell:hover .cell-overlay { display: flex; }
+
+.cell-name { font-weight: 600; }
+.cell-profile, .cell-mode { color: var(--muted); }
+.cell-mode { text-transform: uppercase; font-size: 10px; letter-spacing: .4px; }
+
+.cell-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.cell-actions button { padding: 1px 6px; }
+/* spec 2026-10-16 (ptz-comandos-nao-executam): instrumento PTZ — o joystick fica a esquerda do X
+   (mesma posicao do Nx). O modo ativo usa o VERDE do design system (var(--accent)) e o mesmo fundo
+   escuro de button.active; o azul antigo saiu. O glifo tem 18px porque 13px e 16px foram medidos
+   como mancha em Chromium — 18px com traco grosso e o menor tamanho em que ele se le. user-select
+   evita selecionar o texto do overlay durante o arrasto. */
+.cell-actions .cell-ptz { line-height: 1; font-size: 13px; display: inline-flex; align-items: center; }
+.cell-ptz svg { width: 18px; height: 18px; display: block; }
+.cell-ptz.ativo { background: var(--active-bg); border-color: var(--accent); color: var(--accent); }
+.stream-cell.ptz-ativo { cursor: crosshair; user-select: none; }
+.stream-cell.ptz-ativo .cell-actions button { cursor: pointer; }
+/* spec 2026-10-17 (item 2): em tela cheia com o PTZ armado a faixa da direita e `fixed` e pintava POR
+   CIMA da imagem. A correcao RESERVA a faixa com padding: a caixa da imagem e dimensionada por
+   `100cqw`, que e o CONTENT BOX do container (`.stream-cell` tem `container-type: size`), entao
+   reservar a faixa encolhe o content box e o `100cqw` acompanha — a faixa cai exatamente sobre o
+   padding. Virar grid NAO serve: `grid-template-columns: 1fr var(--col-dir)` deixaria `100cqw`
+   medindo a celula inteira e a imagem transbordaria a coluna (variante descartada na spec). */
+.stream-cell:fullscreen.ptz-ativo { padding-right: var(--col-dir, 260px); }
+/* faixa de estado do PTZ: aparece com o modo ligado, independente do hover (o operador precisa saber
+   que o instrumento esta armado mesmo com o mouse fora da celula). pointer-events none para nao roubar
+   o arrasto da imagem. */
+.cell-ptz-faixa {
+  position: absolute;
+  inset: 26px 0 auto 0;
+  display: flex;
+  justify-content: center;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.cell-ptz-faixa.erro { color: var(--color-danger); }
+
+.cell-stream {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 4px 6px;
+  background: linear-gradient(transparent, var(--scrim));
+  font-size: 11px;
+}
+.stream-cell:hover .cell-stream { display: flex; }
+
+.tree li[draggable] { cursor: grab; }
+.tree li[draggable]:active { cursor: grabbing; }
+
+.add-camera {
+  /* CTA: nao estica ate a borda; fit-content + margin auto centraliza no painel */
+  width: fit-content;
+  margin: 6px auto;
+  padding: 7px;
+  /* CTA: unico bloco verde-acentado da sidebar; texto escuro sobre o accent da tema */
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.add-camera:hover { filter: brightness(1.12); }
+
+/* alternador dos paineis: alvo de 22px, na borda INTERNA de cada cabecalho */
+.painel-toggle {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  flex: none; /* nao encolhe: preserva o alvo de 22px com o painel direito recolhido */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.rightpanel-head { display: flex; align-items: center; padding: 4px 10px; border-bottom: 1px solid var(--border); }
+.rightpanel-head .painel-toggle { margin-left: 0; margin-right: auto; }
+
+/* recolhido: esconde o corpo e o texto do cabecalho, e centraliza o alternador na faixa */
+.shell.rec-esq .sidebar-rolagem,
+.shell.rec-esq .sidebar > .add-camera,
+.shell.rec-esq .sidebar-head .busca { display: none; }
+.shell.rec-esq .sidebar-head { justify-content: center; padding: 7px 4px; }
+.shell.rec-dir .rightpanel > *:not(.rightpanel-head) { display: none; }
+.shell.rec-dir .rightpanel-head { justify-content: center; padding: 7px 4px; }
+
+/* ---- Responsividade operacional (spec 2026-10-17, secao "Responsividade operacional") ----
+   Abaixo de 1280px o painel direito se auto-recolhe nos MESMOS 32px que a preferencia salva usa
+   (`.shell.rec-dir`); abaixo de 1024px o esquerdo tambem. As declaracoes sao as MESMAS de `.shell.rec-*`,
+   repetidas aqui de proposito: largura de coluna NAO recolhe sozinha — sem esconder o conteudo e
+   recentrar o cabecalho, o painel vira uma faixa de 32px com conteudo de 42px dentro (`.rightpanel`
+   tem `padding: 10px` e o cabecalho tem 22px de botao mais padding), isto e, faixa com rolagem em vez
+   de recolhimento. Nenhuma regra daqui introduz rolagem no shell (invariante preservada).
+   A excecao do PTZ: com o instrumento armado a barra fica aberta por decisao registrada (spec
+   2026-10-17-ptz-no-painel-direito, 4.3), que o App ja expressa tirando a classe `rec-dir` do shell.
+   `:has(.rightpanel.ptz)` e a MESMA condicao escrita no CSS — sem ela, num monitor de 1280 menos a
+   regra de largura venceria o modo de PTZ e o painel sairia com 32px.
+   Fica ao lado das `.shell.rec-*` acima, e nao no fim do arquivo: a guarda estatica do painel de PTZ
+   fatia o CSS a partir do bloco daquele painel ate o EOF, e ali as duas classes do painel esquerdo
+   entrariam no corte. */
+@media (max-width: 1279px) {
+  .shell:not(:has(.rightpanel.ptz)) { --col-dir: 32px; }
+  .shell:not(:has(.rightpanel.ptz)) .rightpanel > *:not(.rightpanel-head) { display: none; }
+  .shell:not(:has(.rightpanel.ptz)) .rightpanel-head { justify-content: center; padding: 7px 4px; }
+}
+@media (max-width: 1023px) {
+  .shell { --col-esq: 32px; }
+  .shell .sidebar-rolagem, .shell .sidebar > .add-camera, .shell .sidebar-head .busca { display: none; }
+  .shell .sidebar-head { justify-content: center; padding: 7px 4px; }
+}
+
+/* G · arquivo (playback) — spec 2026-10-18: a barra de tempo individual (timeline-bar/tl-*) e o
+   corpo archive-body saem com a aba velha; o palco novo e .arquivo-stage (fim do arquivo). */
+.player {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+}
+
+/* Pele do player nativo (spec 2026-10-19, player MSE): tokens do `:root` apenas —
+   nenhum hex novo (a guarda `design-tokens.test.ts` le este arquivo como TEXTO) e nenhum `@media` de
+   largura (o responsivo do player sai em utilitarios Tailwind; `responsividade.test.ts` exige
+   exatamente dois blocos). */
+.player video { flex: 1; min-height: 0; width: 100%; background: var(--video); border-radius: var(--radius-sm); }
+.player-palco { flex: 1; display: flex; min-height: 0; }
+.player-gravacao { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+/* Modo completo (o `...`): a faixa de recursos avancados, no mesmo desenho da faixa do player. */
+.player-completo { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); }
+.player-completo input { width: 84px; font: inherit; color: var(--text); background: var(--control); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 2px 4px; }
+
+.player-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+/* spec 2026-10-17: faixa de comandos do player — os botoes usam o estilo global; aqui so o layout
+   (no palco do arquivo a barra e escondida por `.arquivo-stage .player-bar`, fim do arquivo) */
+.player-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.player-estado { font-size: 11px; color: var(--warn); text-transform: lowercase; }
+.warn-text { color: var(--warn); }
+
+/* spec 2026-10-17: a lista "exports recentes" saiu do palco e mora no corpo do painel direito. O
+   recolhimento e herdado (`.shell.rec-dir .rightpanel > *:not(.rightpanel-head)`) e o espacamento e a
+   rolagem vem do proprio `.rightpanel` (padding 10px / overflow auto): aqui ficam so a lista e o link. */
+.painel-exports ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.painel-exports a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.painel-exports a:hover { text-decoration: underline; }
+/* spec 2026-10-23 (exclusao/download em lote): o painel vira coluna — a lista rola e a barra de
+   acoes fica no pe. `:has` restringe a mudanca a este painel (o rightpanel hospeda outros). */
+.rightpanel:has(.painel-exports) { display: flex; flex-direction: column; overflow: hidden; }
+.rightpanel:has(.painel-exports) .painel-exports { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.painel-exports ul { flex: 1; min-height: 0; overflow-y: auto; }
+.painel-exports li { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: start; padding: 2px 4px; border-radius: 4px; }
+/* so a linha COM checkbox ganha a coluna do checkbox: job em geracao/erro nao tem selecao e
+   ficaria espremido em 16 px (medido pela revisao da Task 3.3) */
+.painel-exports li:has(input[type="checkbox"]) { grid-template-columns: 16px minmax(0, 1fr); }
+.painel-exports li.marcado { background: var(--hovered-row); }
+.painel-exports-todos { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 4px 0 6px; }
+/* a regra global de `input` da largura cheia ao checkbox: aqui ele volta a ser quadrado (medido: 240px) */
+.painel-exports-todos input[type="checkbox"] { width: auto; flex: 0 0 auto; margin: 0; }
+/* no painel estreito o contador nao cabe ao lado de "Todos": desce para a propria linha */
+.painel-exports-todos .muted { flex-basis: 100%; font-size: 11px; }
+.painel-exports-acoes { display: flex; gap: 6px; padding-top: 8px; margin-top: auto; border-top: 1px solid var(--border); }
+.painel-exports-acoes .nx-btn { flex: 1; }
+.painel-exports-confirma { list-style: none; margin: 0 0 8px; padding: 0; font-size: 12px; }
+
+/* H · adicionar dispositivos (UI do NX Witness) */
+.nx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: start center;
+  padding: 40px 0;
+  background: var(--scrim-baixo);
+}
+
+.nx-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 780px;
+  max-width: 94vw;
+  max-height: calc(100vh - 80px); /* ponytail: teto de altura — o rodape (botao de adicionar) nunca sai da tela */
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.nx-titlebar { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.nx-title { font-size: 13px; font-weight: 600; }
+.nx-titlebar .nx-close { margin-left: auto; }
+/* spec 2026-10-27 (modal-header-ativa v4): with an active switch present, the switch
+   takes the auto margin (it must sit flush left of the close button); zero the close
+   margin so the free space is not split between two auto margins. */
+.nx-titlebar .nx-check + .nx-close { margin-left: 0; }
+
+.nx-tabs { display: flex; gap: 18px; padding: 10px 14px 0; border-bottom: 1px solid var(--border); }
+.nx-tab { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); padding: 0 0 8px; }
+.nx-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.nx-body { min-height: 0; padding: 14px; overflow-y: auto; } /* ponytail: rola aqui dentro para o rodape nunca sair da tela */
+.nx-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 26px; align-items: start; }
+.nx-field { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.nx-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.nx-input { width: 100%; }
+.nx-port-row { display: flex; align-items: flex-end; gap: 14px; }
+.nx-input.nx-port { width: 90px; }
+.nx-input.nx-largura-auto { width: auto; } /* duas classes: vence o .nx-input global (padrao nx-port). spec 2026-10-18 (abas): o utilitario w-auto NAO vence camada nenhuma. */
+.nx-port[disabled] { color: var(--muted); }
+.nx-check { display: flex; align-items: center; gap: 6px; padding-bottom: 7px; font-size: 12px; color: var(--muted); }
+.nx-check input { width: auto; }
+
+/* slide switch da aba Gravacao: o proprio checkbox estilizado — sem componente novo. A largura
+   vai explicita porque o input global do projeto estica para 100% (mesmo motivo do .nx-col-sel).
+   Seletor COMPOSTO de proposito: `.nx-check input { width: auto }` (0,1,1) vence um `.nx-switch`
+   (0,1,0) e o switch colapsava para 2px — medido no gate. */
+.nx-check .nx-switch { appearance: none; -webkit-appearance: none; flex: none; width: 36px; height: 20px;
+  margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--painel-menu);
+  cursor: pointer; position: relative; transition: background .15s, border-color .15s; }
+.nx-check .nx-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.nx-check .nx-switch:checked { background: var(--accent); border-color: var(--accent); }
+.nx-check .nx-switch:checked::after { transform: translateX(16px); background: var(--on-accent); }
+.nx-check .nx-switch[disabled] { opacity: .5; cursor: not-allowed; }
+
+.nx-help { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 50%; font-size: 10px; cursor: help; }
+.nx-help-pop { position: absolute; top: 34px; left: 0; z-index: 2; min-width: 230px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; }
+.nx-help-pop ul { margin: 6px 0 0; padding-left: 16px; }
+
+.nx-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+/* M2 da spec 2026-10-17: os 14px sao os MESMOS do .nx-body (os botoes alinham com o texto do
+   conteudo). Vale so na modal em que o .nx-actions e filho direto do .nx-dialog — nas outras ele
+   ja esta dentro do .nx-body, que tem os 14px. */
+.nx-dialog > .nx-actions { padding: 0 14px 14px; }
+/* modificador do AddDeviceWizard: acoes a esquerda (spec 2026-10-19) */
+.nx-actions-esq { justify-content: flex-start; }
+.nx-dialog-menor p { margin: 0 0 6px; }
+.nx-btn { padding: 6px 18px; background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
+.nx-btn[disabled] { opacity: .5; }
+/* DEPOIS do .nx-btn de proposito: os dois tem a mesma especificidade (uma classe cada), entao
+   quem vence e a ORDEM no arquivo. Antes desta spec o bloco vinha antes e o vermelho do Excluir
+   nunca pintou (medido: os dois botoes saiam com o mesmo verde). A guarda da Task 3.1 pina isto. */
+.nx-btn-perigo { background: var(--danger); border-color: var(--danger); color: var(--branco); }
+
+.nx-results { min-height: 320px; margin-top: 16px; border-top: 1px solid var(--border); }
+.nx-empty { display: grid; place-items: center; gap: 10px; min-height: 300px; }
+.nx-empty svg { width: 96px; height: 72px; color: var(--icone-vazio); }
+.nx-empty p { margin: 0; font-size: 11px; color: var(--muted); }
+
+/* M2: padroes de estado unicos. O loading reusa o .cell-spinner existente (nao ha classe nova);
+   o vazio e o EstadoVazio; o erro e sempre icone + texto, nunca so a cor. */
+.nx-vazio-msg { margin: 0; }
+.nx-erro { display: inline-flex; align-items: center; gap: 4px; color: var(--danger); font-size: 11px; }
+
+.nx-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.nx-table th, .nx-table td { padding: 4px 6px; text-align: left; border-bottom: 1px solid var(--border); }
+.nx-table th { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+
+/* colunas da direita: situacao (contagem no cabecalho / "Adicionado" no corpo) e o checkbox */
+.nx-table .nx-col-situacao { text-align: right; }
+.nx-table .nx-col-sel { width: 30px; text-align: right; }
+.nx-table .nx-col-sel input { width: auto; } /* ponytail: o input{width:100%} global esticaria o checkbox */
+/* spec 2026-10-18 (abas): hover por tipo nos icones de acao. Fora de camada como todo o arquivo:
+   .nx-acao-*:hover (0,2,0) vence o button{color:var(--text)} global (0,0,1) na mesma condicao de
+   camada. Tokens existentes; nenhum hex novo (guarda design-tokens.test.ts nao exige emenda). */
+.nx-acao-editar:hover, .nx-acao-ativar:hover { color: var(--accent); }
+.nx-acao-bloquear:hover, .nx-acao-reset:hover { color: var(--warn); }
+.nx-acao-excluir:hover { color: var(--danger); }
+.nx-row-added { opacity: .55; }
+
+/* spec 2026-10-19: rodape da wizard comeca a esquerda (a classe e exclusiva do AddDeviceWizard) */
+.nx-footer { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--border); }
+.nx-footer p { margin: 0; }
+
+.nx-err { margin: 0 0 10px; color: var(--danger); font-size: 12px; }
+.nx-input.nx-invalido { border-color: var(--danger); } /* duas classes: vence o input:focus global */
+.nx-aviso { color: var(--danger); font-size: 11px; }
+
+/* painel de configuracao da camera: rotulo -> valor; dd quebra URL/UUID sem estourar o dialog */
+.nx-cfg { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; margin: 8px 0; }
+.nx-cfg dt { color: var(--muted); }
+.nx-cfg dd { margin: 0; word-break: break-all; }
+.nx-uuid { display: inline-flex; align-items: center; gap: 6px; }
+.nx-copiar { background: none; border: 1px solid var(--border); border-radius: var(--radius-md); color: inherit; cursor: pointer; padding: 0 6px; line-height: 1.6; }
+
+/* CTA "Informar fabricante" + modal menor do combobox (spec informar-fabricante-camera) */
+.nx-cta-linha { display: flex; justify-content: flex-end; margin: 2px 0 10px; }
+.nx-dialog-menor { width: 380px; }
+
+/* spec 2026-10-18 (4.7): so a modal de Administracao e mais larga, para as 4 colunas da tabela
+   caberem sem barra horizontal. O `max-width: 94vw` do `.nx-dialog` continua valendo, entao em tela
+   estreita a largura e limitada por ele. */
+.nx-dialog-largo { width: 1000px; }
+
+/* spec 2026-10-19 (modal-perfil-unificada): tabela de permissoes do FormularioPerfil — 4 colunas com
+   cabecalho; radio mascarado no padrao do .nx-switch: circulo de contorno --muted, cheio --accent com
+   ponto central --bg. Sem token novo e sem @media nova. */
+.prf-tabela { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.prf-linha { display: grid; grid-template-columns: 1fr repeat(3, 56px); align-items: center; padding: 4px 8px; }
+.prf-linha + .prf-linha { border-top: 1px solid var(--border); }
+.prf-cabecalho { color: var(--muted); font-size: 11px; }
+.prf-nivel { justify-self: center; }
+.prf-radio { appearance: none; -webkit-appearance: none; width: 16px; height: 16px; margin: 0; display: block;
+  border: 1px solid var(--muted); border-radius: 50%; background: none; cursor: pointer; position: relative; }
+.prf-radio:checked { background: var(--accent); border-color: var(--accent); }
+.prf-radio:checked::after { content: ''; position: absolute; top: 4px; left: 4px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--bg); }
+
+
+/* ============ palco de layouts (spec 2026-10-14, UX NX) ============ */
+.stage-tabs {
+  display: flex; align-items: stretch; gap: 2px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border); min-height: 30px; flex: none;
+}
+.stage-tab {
+  display: flex; align-items: center; gap: 6px; padding: 4px 8px;
+  border: 1px solid var(--border); border-bottom: none; border-radius: 4px 4px 0 0;
+  background: transparent; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.stage-tab.active { background: var(--selected-row); color: inherit; }
+.stage-tab .stage-tab-x { all: unset; cursor: pointer; padding: 0 2px; color: var(--muted); }
+.stage-tab .stage-tab-x:hover { color: var(--danger); }
+.stage-erro { align-self: center; margin-left: 8px; color: var(--danger); font-size: 11px; }
+
+/* O palco e a area de medida e o LIMITE da celula maximizada (spec
+   2026-10-18-celula-maximizada-60). `--ampliacao` e o unico botao de ajuste e agora vale o INSET, em
+   porcentagem do palco: 20% de inset = a celula toma os 60% centrais. A unidade mora no VALOR, porque
+   quem a usa e o `inset`. `container-type: size` fica (fora do escopo desta rodada). */
+.stage-grid { flex: 1; min-height: 0; display: grid; gap: 4px; padding: 6px; position: relative; container-type: size; --ampliacao: 20%; }
+.stage-vazio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.stage-cell { position: relative; z-index: 2; min-width: 0; min-height: 0; cursor: grab; }
+/* ---- spec 2026-10-18: celula selecionada (borda) e ampliada (folga) ---- */
+/* Duas classes de COMPORTAMENTO de proposito: `selecionada` e a borda e nao depende do tamanho;
+   `ampliada` e a folga e nao depende da borda. O anel vai no `.cell-quadro`, que e o retangulo da
+   imagem (aspect-ratio do formato), e nao na caixa do slot: a borda coincide com o limite da
+   transmissao na celula normal e na maximizada, sem vazio em nenhuma direcao
+   (spec 2026-10-18-anel-selecao-no-quadro). O `z-index: 1` poe o anel sobre o video e sobre o
+   `.cell-overlay`; o `overflow: hidden` do quadro nao o corta porque `inset: 0` o mantem na
+   padding box (medido na sonda da spec). */
+.stage-cell.selecionada { z-index: 3; }
+/* A Gravação não tem .cell-quadro: o segundo âncora é a raiz do player
+   (spec 2026-10-18-borda-selecao-arquivo, medido: .celula-playback já é posicionada e coincide com a célula). */
+.stage-cell.selecionada .cell-quadro::after,
+.stage-cell.selecionada .celula-playback::after {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  border: 2px solid var(--accent);
+}
+/* A maximizada: sai do slot (o palco escreve `1 / -1` inline) e vira camada do palco inteiro. O `inset`
+   em porcentagem resolve contra a caixa do palco, entao a camada NAO extrapola os limites do palco —
+   o requisito do operador fica garantido por construcao. Sem `margin` (modelo antigo), sem `border` (o
+   anel verde e da classe `selecionada`) e sem `transform`/`filter`/`will-change`, que criariam bloco de
+   contencao para o menu de contexto, que e `position: fixed` (styles.css:303). */
+.stage-cell.ampliada { position: absolute; inset: var(--ampliacao); }
+/* a alca de redimensionar sai da maximizada: o arrasto mexeria no slot, sem efeito visivel na camada */
+.stage-cell.ampliada .cell-resize { display: none; }
+.cell-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 5; opacity: 0; }
+.stage-cell:hover .cell-resize { opacity: 0.6; background: linear-gradient(135deg, transparent 50%, var(--muted) 50%); }
+
+.layout-tree { border-top: 1px solid var(--border); padding: 4px 0; }
+.layout-cabeca { font-weight: 500; }
+.layout-li .layout-nome { cursor: pointer; }
+
+/* ---- spec 2026-10-15: secao Cameras, filhos da arvore de Layouts ---- */
+/* cabecalho da secao "Cameras" (a arvore de cameras nao tinha cabecalho nenhum) */
+/* Cabecalho da secao "Cameras": UMA linha no topo, sem flex-basis 100%.
+   ponytail: NAO use .tree-cabeca aqui — ele traz flex-basis:100%, que dentro da .sidebar
+   (flex column) significa 100% da ALTURA: o cabecalho engolia o sidebar e o rotulo ficava
+   centralizado num bloco vazio de tela inteira (defeito medido em 2026-10-15). */
+.tree-secao { font-weight: 500; padding: 4px 10px; flex: none; display: flex; align-items: center; }
+.tree-secao .cam-dots { margin-left: auto; }
+/* spec 2026-10-18 (filtros do cabecalho): os filtros ficam COLADOS no "+"; so o primeiro abre o vao */
+.tree-secao .cam-dots ~ .cam-dots { margin-left: 0; }
+/* filtro ligado = icone selecionado (mesmo verde do button.active da topbar) */
+.tree-secao .cam-dots.ativo { opacity: 1; background: var(--active-bg); }
+
+/* mini CTA: o "+" de criar vira botao visível (spec 2026-10-18, item 2). Seletor de DUAS
+   classes para vencer .cam-dots (precedente .nx-input.nx-port); unlayered como o resto da casa. */
+.cam-dots.mini-cta { opacity: 1; width: 20px; height: 20px;
+  background: var(--control); border: 1px solid var(--border); color: var(--text); }
+.cam-dots.mini-cta:hover { background: var(--hovered-row); }
+.cam-dots.mini-cta[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+/* a bolinha de 7px (badge) precisa de flex para ser centralizada dentro do botao (span inline nao e flex-item aqui) */
+.tree-secao .filtro-gravacao { display: flex; align-items: center; justify-content: center; }
+/* Campo de filtro (spec 2026-10-17, secao 4.1). O visual base JA VEM da regra `input` do arquivo
+   (linha ~90: fundo --input, borda --border, raio 3px, texto --text, `font: inherit`, `width: 100%`):
+   aqui e so a GEOMETRIA dentro da secao e o marcador. Repetir borda/fundo aqui seria a mesma regra
+   escrita duas vezes. */
+/* filhos do no de layout: um nivel, so cameras — mesmo padding-left do .tree-filhos */
+.layout-filhos { list-style: none; margin: 0; padding-left: 14px; flex-basis: 100%; }
+/* a linha da camera-filha tem o MESMO padding da linha de camera dentro de .tree (la o
+   .tree li vence o .tree-row por especificidade e da 4px 10px): sem isso a bolinha fica 12px
+   a esquerda da bolinha de uma camera dentro de pasta (medido no gate: 36 contra 48) */
+.layout-filho { padding: 4px 10px; border-left: 2px solid transparent; }
+.layout-filho:hover { background: var(--hovered-row); border-left-color: var(--accent); }
+/* o li do layout precisa do wrap para o <ul> dos filhos descer para a linha de baixo, e do
+   MESMO border-left transparente que .tree li reserva: sem ele a linha do layout fica 2px a
+   esquerda da linha de pasta e o icone nao alinha (medido no gate: 30 contra 32) */
+.layout-li { flex-wrap: wrap; padding: 0; border-left: 2px solid transparent; }
+
+/* ---- spec 2026-10-17: painel de controle PTZ na barra lateral direita ---- */
+/* Com o modo ligado o painel nao tem padding proprio e a lista de posicoes e a UNICA regiao de rolagem. */
+.rightpanel.ptz { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.rightpanel-titulo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.painel-ptz { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+/* 1 · joystick: disco de 176px com 8 setas na circunferencia e o rotulo no centro. --giro posiciona e
+   aponta cada seta (o glifo herda a rotacao, entao o triangulo sai para fora). */
+.ptz-joystick { position: relative; width: 176px; height: 176px; margin: 8px auto; flex: none; }
+.ptz-seta { position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; padding: 0; line-height: 1;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer;
+  transform: translate(-50%, -50%) rotate(var(--giro)) translateY(-64px); }
+.ptz-seta span { font-size: 13px; }
+.ptz-centro { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 56px; height: 56px; border: 1px solid var(--border); border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
+
+/* 2 · velocidade: controle nativo, com a cor do design system */
+.ptz-velocidade { display: flex; align-items: center; gap: 6px; padding: 4px 10px; flex: none; font-size: 12px; }
+.ptz-rotulo { flex: none; }
+.ptz-velocidade input[type="range"] { flex: 1 1 auto; min-width: 0; accent-color: var(--accent); }
+.ptz-pct { flex: none; min-width: 34px; text-align: right; color: var(--muted); }
+
+/* 3 · zoom: mesmo eixo da velocidade — rotulo a esquerda e o par de botoes dividindo o resto */
+.ptz-zoom { display: flex; align-items: center; gap: 6px; padding: 4px 10px; flex: none; font-size: 12px; }
+.ptz-zoom-par { display: flex; gap: 4px; flex: 1 1 auto; min-width: 0; }
+.ptz-zoom-par button { flex: 1 1 0; }
+
+/* 4 · posicoes salvas: busca, cabecalho, lista rolavel e a acao do rodape */
+.ptz-presets { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; margin-top: 6px; }
+/* spec 2026-10-18 (campo acima do label): o campo vai ACIMA do cabecalho da secao; os 6px de baixo
+   separam o campo do label. A sonda da spec mediu: a altura total do bloco nao muda. O `flex: none`
+   continua obrigatorio: o campo das classes .busca* cresce por padrao e a lista .ptz-lista tambem —
+   sem ele as duas dividem a sobra de altura do painel. Altura e largura nao entram aqui: a largura vem
+   do esticamento da coluna e os 28px de altura da regra .busca-campo. */
+.ptz-presets .busca { flex: none; margin: 0 10px 6px; }
+.ptz-lista { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.ptz-linha { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-left: 2px solid transparent; cursor: pointer; }
+.ptz-linha:hover { background: var(--hovered-row); border-left-color: var(--accent); }
+.ptz-linha.sel { background: var(--selected-row); border-left-color: var(--accent); }
+.ptz-linha .tree-nome { flex: 1 1 auto; }
+.ptz-linha:hover .cam-dots { opacity: 1; }
+
+/* copia do painel em tela cheia: a celula E a viewport, entao `fixed` cola na borda direita dela */
+.cell-painel-ptz { position: fixed; top: 0; right: 0; bottom: 0; width: var(--col-dir, 260px);
+  display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--border); z-index: 30; }
+
+/* Overlay de PTZ na celula (spec 2026-10-17, secao 4.2). O alvo e a seta sao desenhados a partir do
+   ponto do CLIQUE: o container nasce com a origem nesse ponto e a rasteira cresce dele. Tudo
+   decorativo (`aria-hidden` no TSX): o overlay nao entra na arvore de acessibilidade.
+   A posicao chega por estilo inline escrito no DOM (o TSX escreve width/left/transform), nunca por
+   estado do React — um re-render por pointermove re-renderizaria o video. */
+.ptz-overlay { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; display: none; }
+
+/* o ponto exato do clique: disco escuro translucido (legivel sobre video claro) com o ponto branco
+   no centro (o que diz onde o operador agarrou) */
+.ptz-alvo { position: absolute; left: -7px; top: -7px; width: 14px; height: 14px; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.4); }
+.ptz-alvo::after { content: ''; position: absolute; left: 5px; top: 5px; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--branco); }
+
+/* a seta: barra branca TRANSLUCIDA (o video aparece por baixo) saindo do alvo na direcao do ponteiro */
+.ptz-rasteira { position: absolute; left: 0; top: 0; transform-origin: 0 50%; }
+/* ponytail: prefixado com .ptz-overlay porque `.ptz-seta` ja e a seta do joystick do painel direito
+   (onda 4A.1); solto, este bloco zeraria width/height daquelas setas de 32 px. */
+.ptz-overlay .ptz-seta { position: absolute; left: 0; top: -2px; height: 4px; width: 0;
+  background: rgba(255, 255, 255, 0.45); }
+/* a ponta: quase opaca e mais larga que a barra (o dobro), apontando para onde o operador empurra */
+.ptz-ponta { position: absolute; top: -4px; left: 0; width: 0; height: 0;
+  border-left: 8px solid rgba(255, 255, 255, 0.85);
+  border-top: 4px solid transparent; border-bottom: 4px solid transparent; }
+
+/* o aviso de acao: canto inferior esquerdo, 16 px das bordas, e NUNCA rouba o arrasto */
+.ptz-aviso { position: absolute; left: 16px; bottom: 16px; z-index: 5; pointer-events: none;
+  display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: var(--radius-lg);
+  background: rgba(0, 0, 0, 0.55); color: var(--branco); font-size: 12px; line-height: 1; }
+.ptz-aviso-icone { display: inline-grid; place-items: center; width: 14px; height: 14px; font-size: 12px; }
+.ptz-aviso-icone.circulo { border: 1px solid currentColor; border-radius: 50%; }
+/* as reticencias aparecem em sequencia (1,2 s). Com `prefers-reduced-motion` elas ficam ESTATICAS. */
+.ptz-ponto { animation: ptz-ponto 1.2s infinite; }
+.ptz-ponto:nth-child(2) { animation-delay: 0.2s; }
+.ptz-ponto:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ptz-ponto { 0%, 40% { opacity: 1; } 41%, 100% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  .ptz-ponto { animation: none; opacity: 1; }
+  .ptz-aviso { transition: none; }
+}
+
+/* Os dois botoes de gravar posicao usam `aria-disabled` (e nao `disabled`) para o `title` funcionar e o
+   botao continuar na ordem de foco. Ate aqui NAO existia nenhuma regra para o atributo: o desabilitado
+   tinha a mesma cara do habilitado (medido em 2026-10-17, spec 4.5).
+   O `+` (classe `.cam-dots`) engana por cima disso: ele e `opacity: .45` e SOBE para 1 no hover, entao
+   parecia esmaecido com o mouse longe e aceso com o mouse perto, independentemente do estado. A regra
+   de hover abaixo e o que devolve o desenho ESTAVEL ao botao desabilitado (especificidade 0,4,0 vence
+   o `.cam-dots:hover` 0,2,0 — por isso ela vem DEPOIS e com o atributo no seletor). */
+.ptz-presets .cam-dots[aria-disabled='true'],
+.ptz-presets .add-camera[aria-disabled='true'] { opacity: 0.35; cursor: not-allowed; }
+.ptz-presets .cam-dots[aria-disabled='true']:hover { opacity: 0.35; background: none; }
+
+/* Lista de canais do candidato multi-canal (spec 2026-10-17, decisao 4). Sem hex e sem token novo:
+   o bloco só usa --border e --muted, que já existem em :root (linhas 36 e 38). */
+.nx-canais > td { padding: 6px 6px 8px; border-bottom: 1px solid var(--border); }
+.nx-canais-lista { display: flex; flex-wrap: wrap; gap: 6px 14px; list-style: none; margin: 0; padding: 0; }
+.nx-canais-lista label { display: flex; align-items: center; gap: 4px; }
+.nx-canais-lista input { width: auto; } /* ponytail: o input{width:100%} global esticaria o checkbox */
+.nx-canais-aviso { color: var(--muted); font-size: 11px; }
+.nx-canais-toggle { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; padding: 0 4px 0 0; }
+
+/* Retangulo da selecao de area com Shift (spec 2026-10-18, secao 4): o verde do design system no lugar do
+   azul do Nx. Sem hex novo — tudo sai de --accent, que ja existe no :root. A camada tem o MESMO z-index do
+   overlay da seta (4) e nao recebe ponteiro: o gesto continua no handler da celula.
+   O preenchimento de 18% e translucido de proposito (o video aparece por baixo); sobre imagem clara ele
+   quase some, e por isso a borda opaca e os quatro cantos em "L" sao obrigatorios — sao eles que delimitam
+   a area, como no Nx. O tamanho e a posicao do retangulo vem por estilo inline (o componente escreve a
+   geometria a cada pointermove, sem re-render). */
+.ptz-selecao {
+  position: absolute; z-index: 4; pointer-events: none; display: none;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/* O "L" de cada canto: um quadrado de 12 px com duas bordas de 2 px. Fica POR FORA do retangulo (-12 px
+   no eixo), entao nao cobra area util da imagem nem depende do preenchimento para ser visto. */
+.ptz-selecao-canto {
+  position: absolute; width: 12px; height: 12px; border: 0 solid var(--accent);
+}
+.ptz-selecao-canto[data-canto='tl'] {
+  left: -12px; top: -12px; border-left-width: 2px; border-top-width: 2px;
+}
+.ptz-selecao-canto[data-canto='tr'] {
+  right: -12px; top: -12px; border-right-width: 2px; border-top-width: 2px;
+}
+.ptz-selecao-canto[data-canto='bl'] {
+  left: -12px; bottom: -12px; border-left-width: 2px; border-bottom-width: 2px;
+}
+.ptz-selecao-canto[data-canto='br'] {
+  right: -12px; bottom: -12px; border-right-width: 2px; border-bottom-width: 2px;
+}
+/* spec 2026-10-19 (paridade Nx): circulo VAZADO no centro do retangulo — so o traco, sem
+   preenchimento. O `color-mix` com 20% de branco e o lighter(120) do Nx em CSS nativo (ponytail:
+   nenhuma lib). Geometria (centro, diametro) entra por estilo inline do OverlayPtz — o jsdom nao
+   mede layout, a forma e daqui. */
+.ptz-selecao-circulo {
+  position: absolute; display: none; border-radius: 50%; background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 80%, white);
+}
+/* spec 2026-10-18 (5.2): o mosaico de playback (1116-1131 antigo) saiu de cena — o palco agora e
+   .arquivo-stage com .stage-grid reusa do vivo (fim do arquivo). --ampliacao vem de .stage-grid.
+   .sem-gravacao fica: o CelulaPlayback reusa a overlay. */
+.sem-gravacao { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgb(0 0 0 / 55%); color: var(--muted); font-size: 12px; pointer-events: none; }
+.timeline-global { border-top: 1px solid var(--border); padding: 4px 8px; font-size: 11px;
+  --tl-nome: 116px; --tl-gap: 9px; --tl-col: calc(var(--tl-nome) + var(--tl-gap)); --tl-regua: 16px; }
+.tl-conteudo { position: relative; }
+.regua { position: relative; height: var(--tl-regua); margin-left: var(--tl-col);
+  border-bottom: 1px solid var(--border); }
+.timeline-global .regua { margin-right: var(--tl-scrollbar, 0px); }
+.timeline-global .regua .marca { position: absolute; bottom: 2px; transform: translateX(-50%); white-space: nowrap; }
+.timeline-global .regua .marca[data-edge='start'] { transform: none; }
+.timeline-global .regua .marca[data-edge='end'] { transform: translateX(-100%); }
+.timeline-global .trackbar { overflow: hidden; min-width: 0; }
+.timeline-global .tl-hit { right: var(--tl-scrollbar, 0px); }
+.trilhas { position: relative; max-height: 96px; overflow-y: auto; }   /* cap de 4 trilhas (spec 2026-10-19, D4): intacto */
+.trilha { display: flex; align-items: center; gap: var(--tl-gap); height: 24px;
+  border-bottom: 1px solid var(--border); }
+.trilha.selecionada { outline: 2px solid var(--accent); outline-offset: -2px; }  /* borda na linha inteira (spec 2026-10-19, D5): intacto */
+.trilha .nome { width: var(--tl-nome); flex: none; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.trilha .trackbar { position: relative; flex: 1; height: 16px; background: var(--hovered-row);
+  border-radius: 3px; }
+.trilha .barra { position: absolute; top: 0; height: 100%; background: var(--accent);
+  border-radius: 2px; }
+.tl-hit { position: absolute; top: var(--tl-regua); left: var(--tl-col); right: 0; bottom: 0;
+  cursor: crosshair; }
+.tl-hit .playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); }
+.tl-hit .playhead::before { content: '▼'; position: absolute; top: -12px; left: -5px;
+  font-size: 11px; color: var(--text); }
+.dialogo-exportar { position: absolute; inset: auto auto 40px 40px; background: var(--panel); border: 1px solid var(--border); padding: 10px; z-index: 40; }
+/* spec 2026-10-18 (arquivo-bottom-sheet): a aba Arquivo virou palco de playback + Bottom Sheet.
+   A pagina nao tem barra de rolagem propria (C4): o palco encolhe, o sheet e fixo e a rolagem
+   vive dentro de .trilhas (spec 2026-10-19). A pele do player vem de .player (mantida);
+   o player-bar morre dentro do palco — quem comanda e o sheet. */
+.arquivo-stage { flex: 1; min-height: 0; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+.arquivo-stage .stage-grid { flex: 1; min-height: 0; }
+/* a alca do playback e sempre visivel (no vivo ela so aparece no hover) */
+.arquivo-stage .cell-resize { display: block; opacity: 0.6; }
+.arquivo-stage .player-bar { display: none; }
+/* fill:true (19/10): sem isto o player fixava no tamanho NATIVO do video (1080 px) e a
+   imagem vazava da celula para a de baixo. O fill prende o player ao container; o object-fit
+   preserva a proporcao com tarjas em vez de esticar. */
+.arquivo-stage .player-palco video { object-fit: contain; }
+.celula-playback { position: absolute; inset: 0; display: flex; flex-direction: column; }
+/* spec 2026-10-18 (videowall-gravacao-abas, sec 6.7): a barra da celula aparece no hover, como no vivo. */
+.celula-playback:hover .cell-overlay { display: flex; }
+.celula-playback .player-gravacao { flex: 1; min-height: 0; }
+.celula-playback-nome { position: absolute; left: 8px; bottom: 6px; z-index: 4; font-size: 12px;
+  color: var(--branco); background: rgb(0 0 0 / 45%); padding: 2px 8px; border-radius: 999px; pointer-events: none; }
+/* spec 2026-10-19 (selecao-sheet-tela-cheia-flutuante, S2/S6): a tela cheia do Arquivo e do
+   CONTAINER; a celula ampliada vira fixed e o sheet flutua acima dela (z-index da regra .sheet).
+   Rótulo no topo esquerdo: o sheet colapsado mede 93 px e cobriria o rodape (sonda 19/10).
+   Emenda E5 (review 19/10): sem o z-index auto nos slots, o `z-index: 1` da celula fixa resolvia
+   DENTRO do contexto de empilhamento do proprio .stage-cell (z 2; 3 se .selecionada) e tiles
+   irmaos pintavam por cima do video em tela cheia (medido em Chrome headless no review final).
+   auto so vale dentro de :fullscreen do Arquivo — o vivo e o modo normal nao mudam. */
+.arquivo-stage:fullscreen .stage-cell { z-index: auto; }
+.arquivo-stage:fullscreen .cell-resize { display: none; }   /* E6 (review): alca z5 do slot pintaria no canto sobre o video e viraria resize no clique */
+.arquivo-stage:fullscreen .celula-tela-cheia { position: fixed; inset: 0; z-index: 1; }
+.arquivo-stage:fullscreen .celula-tela-cheia .celula-playback-nome { bottom: auto; top: 6px; }
+.sheet { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 6px 10px;
+  position: relative; z-index: 3;
+  border-top: 1px solid var(--border); background: var(--panel); }
+/* faixa de abrir/fechar o sheet (spec 2026-10-19-faixa-seta-bottom-sheet): encostada na
+   borda superior, acima da linha 1, sempre visivel. As margens negativas cancelam o padding
+   do .sheet para a faixa ocupar a largura total. */
+.sheet-faixa { display: flex; align-items: center; justify-content: center;
+  height: 22px; margin: -6px -10px 0; cursor: pointer; user-select: none; }
+.sheet-faixa:hover { background: var(--hovered-row); }
+.sheet-faixa svg { width: 26px; height: 16px; stroke: var(--text); stroke-width: 2;
+  fill: none; stroke-linecap: round; stroke-linejoin: round; transition: transform .18s ease; }
+.sheet-aberto .sheet-faixa svg { transform: rotate(180deg); }
+/* spec 2026-10-19 (sheet-gravacao-datepicker): linha 1 em grid 1fr/auto/1fr — comandos a esquerda,
+   relogio centralizado de verdade (coluna auto), date picker a direita (D1/D7). */
+.sheet-linha { display: grid; grid-template-columns: 1fr auto 1fr auto; align-items: center; gap: 8px; }
+.sheet-acoes { justify-self: start; display: flex; align-items: center; gap: 8px; }
+.sheet-linha button { min-width: 34px; }
+.sheet-acoes button[aria-pressed='true'] { background: var(--active-bg); border-color: var(--accent); color: var(--accent); }
+.sheet-relogio { font-variant-numeric: tabular-nums; font-weight: 600; }
+.sheet-linha input[type='date'] { justify-self: end; width: auto; }
+
+/* spec 2026-10-19 (exportacao-video): barra de progresso do export (dialog + sidebar). Nasce como
+   dois spans com classes proprias — nao e primitiva da casa, vive so no recurso. Tokens do tema. */
+.exp-barra { display: inline-block; width: 90px; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; vertical-align: middle; }
+.exp-fill { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.painel-exports-item { font-size: 12px; }
+.painel-exports-status { font-size: 12px; margin-top: 2px; -webkit-line-clamp: 1; }
+/* limite de 2 linhas: nome longo e mensagem de erro nao podem engolir o painel (medido na tela) */
+.painel-exports-status, .painel-exports-item {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.exp-dialog label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.exp-dialog .sheet-linha { grid-template-columns: 1fr 1fr; }
+.exp-msg { color: var(--danger); font-size: 12px; }
+/* plan 2026-10-23: respiro lateral de 16px dentro da modal; o titulo acompanha o mesmo eixo. */
+.exp-dialog .nx-titlebar { padding: 8px 16px; }
+.exp-dialog .exp-form { padding: 14px 16px; }
+.exp-desc-rotulo { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 12px; }
+.exp-desc-rotulo label { margin: 0; color: inherit; font-size: inherit; }
+.exp-desc-conta { margin-left: auto; font-variant-numeric: tabular-nums; }
+.exp-desc-conta.limite { color: var(--warn); }
+.exp-desc-dica { margin: 6px 0 0; font-size: 12px; }
+.obrig { color: var(--danger); margin-left: 2px; }
+/* card da lista: tres linhas, descricao em cima */
+.painel-exports-card { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* plan 2026-10-25 (v5): o status do export é TEXTO na linha da descrição — não o ponto de 7 px
+   do .badge das câmeras (que continua valendo na árvore). A descrição trunca e o texto completo
+   aparece num tooltip ACIMA da linha, para não cobrir câmera e período. */
+.painel-exports-nome { position: relative; display: flex; align-items: center; gap: 8px; justify-content: flex-start; min-width: 0; }
+.painel-exports-nome-texto {
+  font-size: 13px; font-weight: 600; min-width: 0; flex: 1 1 auto; cursor: help;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.painel-exports-camera { font-size: 12px; overflow-wrap: anywhere; }
+/* a pílula do status (escopada: o .badge das câmeras segue ponto de 7 px) */
+.painel-exports-nome .badge {
+  width: auto; height: 18px; flex: 0 0 auto; white-space: nowrap;
+  border-radius: 9px; box-shadow: none; background: var(--control);
+  font-size: 11px; line-height: 18px; padding: 0 7px; font-weight: 600;
+}
+.painel-exports-nome .badge.online { color: var(--accent); }
+.painel-exports-nome .badge.provisioning { color: var(--warn); }
+.painel-exports-nome .badge.error { color: var(--danger); }
+/* tooltip da descrição completa */
+.painel-exports-nome-texto[data-dica]:hover::after {
+  content: attr(data-dica);
+  position: absolute; left: 0; bottom: calc(100% + 3px); z-index: 6;
+  max-width: 208px; white-space: normal; overflow-wrap: anywhere;
+  background: var(--input); border: 1px solid var(--hover-border); color: var(--text);
+  font-size: 11px; font-weight: 400; line-height: 1.35; padding: 5px 8px; border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .6); pointer-events: none;
+}
+/* garantia: nada rola na horizontal dentro do painel */
+.painel-exports ul { overflow-x: hidden; }
+.panel dl { grid-template-columns: auto minmax(0, 1fr); }
+.panel dd { overflow-wrap: anywhere; min-width: 0; }
+/* spec 2026-10-19: o sheet expandido cresce naturalmente ate linha 1 + regua + 4 trilhas; o cap e
+   de `.trilhas` (1a). A classe .sheet-aberto segue so marcando o estado expandido, sem regra propria. */
+
+/* spec 2026-10-27 (modal-camera-linhas): linha 1 da modal = ativa + gravacao a esquerda, "Set
+   manufacturer" a direita (.spacer-left, utilitaria existente). Duas classes vencem o flex-end de
+   .nx-cta-linha sem toca-la. a regra .nx-linha-switch morreu junto com a linha (era de 2026-10-19). */
+.nx-cta-linha.nx-linha-ativa { justify-content: flex-start; gap: 24px; }
+
+/* spec 2026-10-27 (modal-header-ativa): active switch sits in the titlebar, right,
+   before the close button. margin-left:auto pushes it; gap:8px separates it. */
+.nx-titlebar .nx-check { margin-left: auto; white-space: nowrap; }
+
+/* spec 2026-10-26: tipo de gravacao e sensibilidade alinhados a esquerda, com espaco entre eles.
+   Duas classes vencem o flex-end de .nx-cta-linha, igual ao .nx-linha-ativa. */
+.nx-cta-linha.nx-linha-opcoes { justify-content: flex-start; gap: 24px; }
+
+/* popover do seletor de pastas: mesma superficie do .user-menu (wrap relativo + painel absoluto;
+   --z-overlay = 40: acima do conteudo, abaixo do toast 60) */
+.nx-pasta-wrap { position: relative; }
+.nx-pop {
+  position: absolute; top: 100%; left: 0; z-index: var(--z-overlay);
+  min-width: 320px; max-height: 280px; overflow-y: auto; padding: 4px;
+  background: var(--modal-menu); border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+}
+.nx-pop-head { display: flex; align-items: center; gap: 6px; padding: 4px 8px; color: var(--muted); }
+.nx-pop-item { text-align: left; padding: 5px 10px; background: none; border: 0; border-radius: var(--radius-sm); color: inherit; width: 100%; }
+.nx-pop-item:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* spec 2026-10-19 (pasta-raiz-somente-leitura-slider) secao 4: slider do limite de disco com chip
+   de percentual e campo da pasta raiz somente leitura. */
+.nx-disco-field { align-items: center; }
+.nx-slider-wrap { position: relative; width: 70%; margin-inline: auto; }
+.nx-slider-wrap input[type="range"] { width: 100%; display: block; }
+.nx-slider-chip { position: absolute; top: -20px; transform: translateX(-50%);
+  left: calc((100% - 16px) * var(--pct) / 100 + 8px); font-size: 11px; color: var(--accent); }
+.nx-help { display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; border: 1px solid var(--muted); border-radius: 50%;
+  font-size: 10px; color: var(--muted); cursor: help; }
+.nx-readonly { font-size: 12px; word-break: break-all; }
+.nx-desc { font-size: 11px; color: var(--muted); }
+

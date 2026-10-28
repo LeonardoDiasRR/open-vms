@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ovms-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${OPENVMS_PG_PASSWORD:-pw}
+      POSTGRES_DB: openvms
+    ports:
+      - "55433:5432"
+    volumes:
+      - ovms-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d openvms"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  mediamtx:
+    image: bluenviron/mediamtx:1.21.2
+    container_name: ovms-rtsp
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      MTX_RTSPADDRESS: ":${OPENVMS_RTSP_PORT:-8554}"
+    volumes:
+      - ./deploy/mediamtx.yml:/mediamtx.yml:ro
+  # GPU quando existir no host (spec 2026-10-19 transcoder §5.6):
+  #   NVENC: instalar nvidia-container-toolkit e acrescentar ao serviço:
+  #     deploy: { resources: { reservations: { devices: [{ driver: nvidia, count: all, capabilities: [gpu] }] } } }
+  #   QSV/VAAPI: devices: ["/dev/dri"]
+  # O probe da API escolhe nvenc > qsv > vaapi > libx264 no boot; sem GPU nada muda.
+  api:
+    build:
+      context: .
+      args:
+        VITE_ARCHIVE_ADAPTIVE_PREVIEW: ${OPENVMS_PLAYBACK_PREVIEW:-0}
+    container_name: ovms-api
+    restart: unless-stopped
+    environment:
+      OPENVMS_DATA_DIR: /app/data
+      OPENVMS_TRANSCODE_CACHE_DIR: /app/playback-cache
+      OPENVMS_TRANSCODE_MAX_FFMPEG: ${OPENVMS_TRANSCODE_MAX_FFMPEG:-4}
+      OPENVMS_TRANSCODE_MAX_SESSIONS: ${OPENVMS_TRANSCODE_MAX_SESSIONS:-16}
+      OPENVMS_PLAYBACK_PREVIEW: ${OPENVMS_PLAYBACK_PREVIEW:-0}
+      # PostgreSQL is the only store (spec 2026-10-20). Host networking: the database is the
+      # port published by the `postgres` service on the host loopback.
+      OPENVMS_PG_URL: "${OPENVMS_PG_URL:-postgres://postgres:pw@127.0.0.1:55433/openvms}"
+      OPENVMS_RTSP_PORT: ${OPENVMS_RTSP_PORT:-8554}
+      # ponytail: paridade com a producao (o /tmp/ovms.env dela tem exatamente isto).
+      # Em host mode os padroes do codigo (127.0.0.1:9997 / 8891 / 8554) ja sao os certos.
+      OPENVMS_LIVE: "${OPENVMS_LIVE:-1}"
+    # ponytail: a API precisa do MESMO 127.0.0.1 que o processo atual ve — o Hub escuta a
+    # Control API e o HLS SO no loopback do host (medido: 127.0.0.1:9997 e 127.0.0.1:8891),
+    # e a Control API nao tem autenticacao, entao expo-la na rede seria regressao. Em host
+    # mode a API tambem enxerga o Hub pelo loopback e publica em 7101 direto, como hoje.
+    network_mode: "${OVMS_API_NETWORK:-host}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ovms-data:/app/data
+      - ovms-playback-cache:/app/playback-cache
+      # Every-day configuration (retention, disk ceiling, archive root). Read/write: the Settings
+      # modal writes it through PATCH /api/v1/settings.
+      - ./config.yaml:/app/config.yaml
+      # Raiz das gravacoes no share NFS do host (montado no host via fstab). O bind passa o
+      # mount do host para dentro; sem o share montado o worker de gravacao falha com erro visivel.
+      - ${OVMS_MEDIA_PATH:-/mnt/archive/openvms}:/mnt/archive/openvms
+  web:
+    image: nginx:1.29-alpine
+    container_name: ovms-web
+    restart: unless-stopped
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - dist-web:/usr/share/nginx/html:ro
+    network_mode: "${OVMS_WEB_NETWORK:-host}"
+    depends_on:
+      - api
+  dist:
+    build:
+      context: .
+      target: cliente
+      args:
+        VITE_ARCHIVE_ADAPTIVE_PREVIEW: ${OPENVMS_PLAYBACK_PREVIEW:-0}
+    container_name: ovms-dist
+    command: ["sh", "-c", "cp -r /app/client/dist/. /saida/"]
+    volumes:
+      - dist-web:/saida
+    restart: "no"
+volumes:
+  ovms-pg-data:
+  dist-web:
+  ovms-data:
+  ovms-playback-cache:
+
