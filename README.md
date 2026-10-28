@@ -53,3 +53,40 @@ set a new one — the change is mandatory at the first login.
 
 Recordings are stored under `/mnt/archive` by default. Set
 `OVMS_MEDIA_PATH` before starting the stack to use another location.
+
+## Instalador automatizado (Linux)
+
+Requer **Docker Engine**, **Docker Compose v2**, `git`, `curl` e `openssl`. O instalador não modifica a instalação do Docker. As imagens da API e do frontend são construídas a partir do código do repositório.
+
+Para revisar antes de executar (recomendado):
+
+```bash
+curl -fsSLo openvms-install.sh https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh
+less openvms-install.sh
+bash openvms-install.sh
+```
+
+Instalação direta:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
+```
+
+O instalador clona para `/opt/openvms`, cria `.env` com senha aleatória, utiliza `/var/lib/openvms/recordings` para gravações e instala `/usr/local/bin/openvms`. Use `OPENVMS_INSTALL_DIR`, `OPENVMS_MEDIA_DIR` e `OPENVMS_REF` para personalizar ao executar um script baixado localmente. O PostgreSQL fica publicado apenas em `127.0.0.1:55433` do host. A interface é servida na porta **7102** (HTTP; configure TLS/reverse proxy antes de expor à Internet).
+
+### CLI
+
+```bash
+openvms status
+openvms logs api
+openvms doctor
+openvms start
+openvms stop
+openvms restart
+openvms update
+openvms backup /caminho/seguro/backup.tar.gz
+```
+
+`openvms update` exige checkout Git sem arquivos rastreados modificados, confirma a operação, atualiza por fast-forward e reconstrói a stack. **Faça backup antes de atualizar.** O comando `backup` salva o dump lógico do PostgreSQL, `config.yaml` e `.env` (que contém segredos); **não** inclui vídeos, cache de playback nem volumes auxiliares. Preserve também os volumes e arquivos de gravação em seu procedimento de disaster recovery. O instalador mantém `.env` existente e não faz `git pull` automaticamente.
+
+> O instalador atual utiliza as imagens existentes definidas no Compose e executa build local; publicação de imagens pré-construídas no GHCR pode ser adicionada em uma etapa posterior.
