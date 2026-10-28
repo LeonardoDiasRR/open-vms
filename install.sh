@@ -44,12 +44,10 @@ sudo chmod 700 "$MEDIA_DIR"
 if [ ! -e "$INSTALL_DIR/config.yaml" ]; then
   die "Arquivo config.yaml ausente."
 fi
-say "Instalando CLI..."
-sudo install -m 755 "$INSTALL_DIR/scripts/openvms" /usr/local/bin/openvms
 say "Validando Compose..."
 (cd "$INSTALL_DIR" && "${DOCKER[@]}" compose config --quiet)
 say "Construindo e iniciando serviços (pode levar alguns minutos)..."
 (cd "$INSTALL_DIR" && "${DOCKER[@]}" compose up -d --build)
-say "Instalação iniciada. Execute: openvms status"
+say "Instalação iniciada."
 say "Interface web: http://IP_DO_SERVIDOR:7102"
 say "Altere a senha inicial do administrador no primeiro acesso."
