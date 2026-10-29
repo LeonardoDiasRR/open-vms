@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/instal
 ```
 
 The installer clones the repository to `/opt/openvms`, creates `.env` with a
-random password, and stores recordings under `<install-dir>/archive/`. Set
+random database password, and stores recordings under `<install-dir>/archive/`. Set
 `OPENVMS_INSTALL_DIR`,
 `OPENVMS_MEDIA_DIR` and `OPENVMS_REF` when you run a downloaded script. The
 media directory must live on a local file system. On NFS with root squash,
@@ -55,7 +55,7 @@ manually. PostgreSQL is published only on `127.0.0.1:55433` of the host. The
 web interface runs on port **7102** (HTTP; configure TLS or a reverse proxy
 before exposing it to the Internet).
 
-Open `http://<host>:7102`, sign in as `admin` with the factory password and
+Open `http://<host>:7102`, sign in as `admin` with the factory password `admin` and
 set a new one — the change is mandatory at the first login.
 
 Recordings are stored under `<install-dir>/archive/` by default (example:
