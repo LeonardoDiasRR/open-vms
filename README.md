@@ -33,6 +33,8 @@ camera only ever sees one client, so its load and the network traffic stay
 flat no matter how many people are watching. Streams start on demand —
 nothing pulls a camera when nobody is watching it.
 
+![OpenVMS architecture: MediaMTX hub, live view, RTSP restream and recorder](docs/arquitetura.jpg)
+
 ## Installation
 
 Requirements: a Linux host with Docker and Docker Compose.
