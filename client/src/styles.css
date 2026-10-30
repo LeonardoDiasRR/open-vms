@@ -505,7 +505,7 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 }
 .login-footer svg { color: var(--accent); flex: none; }
 
-.login-card label {
+.login-card label, .nx-cartao label {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1411,3 +1411,13 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .nx-readonly { font-size: 12px; word-break: break-all; }
 .nx-desc { font-size: 11px; color: var(--muted); }
 
+
+/* spec 2026-10-30 (servidor-porta-login-modal): linha Server+Port (medida na sonda: campo Port
+   de 90 px, mesmos 90 px do .nx-port de AddDeviceWizard) e o card da modal de servidor com o
+   estilo do login. .nx-dialog-cartao DEPOIS de .nx-dialog: empate de especificidade, vence a
+   ordem no arquivo. */
+.server-port-row { display: flex; align-items: flex-end; gap: 12px; }
+.server-port-row label { flex: 1; }
+.server-port-row .sp-port { flex: none; width: 90px; }
+.nx-dialog-cartao { border-radius: var(--radius-lg); }
+.nx-cartao { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
