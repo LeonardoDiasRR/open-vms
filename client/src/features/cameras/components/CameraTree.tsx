@@ -352,7 +352,8 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
     );
   }
 
-  // Linha do nó servidor (spec 5.3): ícone 🖥, rótulo, ponto de status (o .badge das câmeras), ⋯.
+  // Linha do nó servidor (spec 5.3): ícone 🖥, rótulo, ⋯. O ponto de status online/offline foi
+  // removido a pedido (2026-10-30); o campo `online` segue no ServerNode (menu/poll).
   // Sem drag do nó, sem drop no nó, sem palco: duplo-clique só expandre/recolhe.
   function renderServer(s: ServerNode, childNodes: TreeNode<Camera>[]) {
     const open = !closed.includes(s.id);
@@ -382,10 +383,6 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
           </span>
           <span className="tree-icone" aria-hidden="true">🖥</span>
           <span className="tree-nome">{s.label}</span>
-          {/* o ponto de status REUSA o .badge das câmeras (.online/.error) — Task 3.3 */}
-          <span className={`badge${s.online ? ' online' : ' error'}`} role="img"
-            aria-label={s.online ? t('cameras.status.online') : t('cameras.status.offline')}
-            title={s.online ? t('cameras.status.online') : t('cameras.status.offline')} />
           <button
             type="button"
             className="cam-dots"

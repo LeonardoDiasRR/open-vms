@@ -465,14 +465,15 @@ describe('server roots', () => {
   ];
   const props = { groups: [], cameras: cams, devices: [], selected: null, onSelect: noop2, onAction: noop2, onDrop: noop2, servers };
 
-  it('draws one server row per server with label and status dot, cameras under their server', () => {
+  it('draws one server row per server, without status dot, cameras under their server', () => {
     const { container } = renderTree(<CameraTree {...props} />);
     const rows = container.querySelectorAll('.tree-servidor');
     expect(rows).toHaveLength(2);
     expect(screen.getByText('Primário')).toBeInTheDocument();
     expect(screen.getByText('Secundário')).toBeInTheDocument();
-    expect(rows[0].querySelector('.badge')?.className).toContain('online');
-    expect(rows[1].querySelector('.badge')?.className).toContain('error');
+    // pedido 2026-10-30: a linha do servidor nao mostra bolinha de status
+    expect(rows[0].querySelector(':scope > .tree-cabeca > .badge')).toBeNull();
+    expect(rows[1].querySelector(':scope > .tree-cabeca > .badge')).toBeNull();
     // cada câmera dentro do UL do próprio servidor
     expect(rows[0].querySelector('.tree-filhos')?.textContent).toContain('Alpha');
     expect(rows[0].querySelector('.tree-filhos')?.textContent).not.toContain('Beta');
