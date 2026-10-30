@@ -41,7 +41,11 @@ export default function AddServerModal({ existingBases, onSubmit, onClose }: Pro
     <div className="nx-backdrop">
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <form className="nx-dialog nx-dialog-menor" role="dialog" aria-modal="true" aria-labelledby="add-server-title" onSubmit={submit}>
-        <h2 id="add-server-title">{t('servers.connect_title')}</h2>
+        {/* invariante do repo (modal-invariante.test.ts): todo .nx-dialog renderiza .nx-close */}
+        <div className="nx-titlebar">
+          <span className="nx-title" id="add-server-title">{t('servers.connect_title')}</span>
+          <button type="button" className="nx-close" onClick={onClose} title={t('shared.close')}>✕</button>
+        </div>
         <label>{t('servers.ip')}
           <input value={ip} onChange={(e) => setIp(e.target.value)} required autoFocus />
         </label>
