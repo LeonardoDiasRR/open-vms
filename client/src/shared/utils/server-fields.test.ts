@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SERVER_HOST_KEY, SERVER_PORT_KEY, buildBase, readLastConnection, saveLastConnection, splitServerValue,
+  SERVER_HOST_KEY, SERVER_PORT_KEY, buildBase, readLastBase, readLastConnection, saveLastConnection, splitServerValue,
 } from './server-fields';
 
 describe('splitServerValue (spec 2026-10-30, 3.2)', () => {
@@ -45,5 +45,15 @@ describe('memoria da ultima conexao (spec 2026-10-30, 3.1)', () => {
     localStorage.clear();
     localStorage.setItem(SERVER_HOST_KEY, 'http://10.95.7.25');
     expect(readLastConnection().host).toBe('10.95.7.25');
+  });
+  it('readLastBase monta a base da memoria; legado decompoe; sem memoria vazio', () => {
+    localStorage.clear();
+    saveLastConnection('srv9', '7102');
+    expect(readLastBase()).toBe(`${window.location.protocol}//srv9:7102`);
+    localStorage.clear();
+    localStorage.setItem(SERVER_HOST_KEY, 'http://10.95.7.25:7102');
+    expect(readLastBase()).toBe('http://10.95.7.25:7102');
+    localStorage.clear();
+    expect(readLastBase()).toBe('');
   });
 });

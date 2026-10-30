@@ -26,6 +26,13 @@ export function readLastConnection(): { host: string; port: string } {
   };
 }
 
+export function readLastBase(): string {
+  // consumidor (App.tsx restore/footer): a base completa a partir da memoria; '' sem memoria.
+  if (!localStorage.getItem(SERVER_HOST_KEY)) return '';
+  const l = readLastConnection();
+  return buildBase(window.location.protocol, l.host, l.port);
+}
+
 export function saveLastConnection(host: string, port: string): void {
   try {
     localStorage.setItem(SERVER_HOST_KEY, host);

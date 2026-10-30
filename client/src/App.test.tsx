@@ -1146,6 +1146,17 @@ describe('servers in the App shell (plan 2026-10-30)', () => {
     await within(container.querySelector('ul.tree') as HTMLElement).findByText('srv2');
   });
 
+  it('boot restores the session when the memory holds a bare host (spec 2026-10-30)', async () => {
+    // O fake responde POR base: 'Cam 9' so aparece se o restore montar http://srv2:7102.
+    // Com o host nu cru no ApiClient o fetch viria relativo da pagina e o me() derrubava o token.
+    localStorage.setItem('openvms.server', 'srv2');
+    localStorage.setItem('openvms.port', '7102');
+    renderApp();
+    // 'Cam 9' e o unicos camera que o fake devolve quando a base montada e http://srv2:7102;
+    // com host nu cru no ApiClient a base sai errada e a arvore mostra 'Cam 1'.
+    expect(await screen.findByText('Cam 9')).toBeInTheDocument();
+  });
+
   it('rename server: the alias replaces the hostname label', async () => {
     renderApp();
     const row = await waitServerRow();

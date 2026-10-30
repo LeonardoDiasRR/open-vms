@@ -31,6 +31,8 @@ import ExportsPanel from '@/features/archive/components/PainelExports';
 import { usePtz } from '@/features/live/hooks/usePtz';
 import { useT, type Language } from '@/shared/i18n';
 
+import { readLastBase } from '@/shared/utils/server-fields';
+
 const SERVER_KEY = 'openvms.server';
 const TOKEN_KEY = 'openvms.token';
 type Mode = 'live' | 'archive';
@@ -154,7 +156,9 @@ export default function App() {
     const token = sessionStorage.getItem(TOKEN_KEY);
     const server = localStorage.getItem(SERVER_KEY);
     if (!token || !server) return;
-    const api = new ApiClient(server);
+    // spec 2026-10-30: a chave virou host nu (legado: URL inteira). A base e montada como no login;
+    // o host nu cru no ApiClient viria URL relativa da pagina e o me() ia embora com o token.
+    const api = new ApiClient(readLastBase());
     api.token = token;
     api.me().then(
       (me) => setSession({ api, user: me.username, profile: me.profile_id || '', capabilities: me.capabilities as Capability[],
@@ -613,7 +617,7 @@ export default function App() {
         <span className={connection.ok ? 'ok' : 'warn'}>
           {connection.ok ? `● ${t('cameras.status.online')}` : `⚠ ${connection.message}`}
         </span>
-        <span>{t('servers.count', { n: servers.length })} · {servers[0]?.label ?? localStorage.getItem(SERVER_KEY) ?? ''}</span>
+        <span>{t('servers.count', { n: servers.length })} · {servers[0]?.label ?? readLastBase()}</span>
         <span>{t('cameras.title')}: {online} / {cameras.length} {t('cameras.status.online')}</span>
       </footer>
 
