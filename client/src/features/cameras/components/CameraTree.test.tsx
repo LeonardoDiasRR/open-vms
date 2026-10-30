@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { LanguageProvider } from '@/shared/i18n';
 import CameraTree from './CameraTree';
@@ -25,7 +25,8 @@ describe('CameraTree', () => {
       />,
     );
     expect(screen.getByText('Portaria')).toBeInTheDocument();
-    expect(screen.getByText('Cameras')).toBeInTheDocument();
+    // plan 2026-10-30: a seção passou a ser a lista de servidores
+    expect(screen.getByText('Servers')).toBeInTheDocument();
   });
 
   it('shows the empty state without cameras', () => {
@@ -42,7 +43,7 @@ describe('CameraTree', () => {
     expect(screen.getByText('No cameras')).toBeInTheDocument();
   });
 
-  it('the section header has the "+" that opens the camera addition', () => {
+  it('the section header has the "+" that opens the server connection (no gate — D4)', () => {
     let clicked = 0;
     renderTree(
       <CameraTree
@@ -52,14 +53,14 @@ describe('CameraTree', () => {
         onSelect={noop}
         onAction={noop}
         onDrop={noop}
-        onAdd={() => { clicked += 1; }}
+        onConnectServer={() => { clicked += 1; }}
       />,
     );
-    fireEvent.click(screen.getByTitle('Add camera'));
+    fireEvent.click(screen.getByTitle('Connect server'));
     expect(clicked).toBe(1);
   });
 
-  it('without onAdd the header "+" does not appear', () => {
+  it('the header "+" is ALWAYS visible (connect server is not a capability — spec 5.3/D4)', () => {
     renderTree(
       <CameraTree
         groups={[]}
@@ -70,7 +71,7 @@ describe('CameraTree', () => {
         onDrop={noop}
       />,
     );
-    expect(screen.queryByTitle('Add camera')).toBeNull();
+    expect(screen.getByTitle('Connect server')).toBeInTheDocument();
   });
 
   // spec 2026-10-16: the dot is full only with recording ON; without it, only the outline
@@ -352,9 +353,9 @@ describe('CameraTree', () => {
     });
 
     // spec 2026-10-18 (item 2): the create "+" becomes a mini CTA
-    it('the new-camera + carries the mini-cta class', () => {
-      renderTree(<CameraTree {...base} onAdd={noop} />);
-      expect(screen.getByTitle('Add camera')).toHaveClass('mini-cta');
+    it('the connect-server + carries the mini-cta class', () => {
+      renderTree(<CameraTree {...base} onConnectServer={noop} />);
+      expect(screen.getByTitle('Connect server')).toHaveClass('mini-cta');
     });
 
     // spec 2026-10-19 (folders opened under filter): guards of the camera tree — CameraTree.tsx does NOT
@@ -448,5 +449,70 @@ describe('CameraTree', () => {
     renderNested(opened);
     fireEvent.doubleClick(screen.getByText('Raiz2'));
     expect(opened).toEqual([{ kind: 'group', id: 'gR' }]);
+  });
+});
+
+// plan 2026-10-30 (multi-server): o nó servidor da árvore (spec 5.3).
+describe('server roots', () => {
+  const noop2 = () => {};
+  const servers = [
+    { id: 'http://a', label: 'Primário', online: true },
+    { id: 'http://b', label: 'Secundário', online: false },
+  ];
+  const cams = [
+    { id: 'c1', name: 'Alpha', state: 'online', server_id: 'http://a' },
+    { id: 'c2', name: 'Beta', state: 'online', server_id: 'http://b' },
+  ];
+  const props = { groups: [], cameras: cams, devices: [], selected: null, onSelect: noop2, onAction: noop2, onDrop: noop2, servers };
+
+  it('draws one server row per server with label and status dot, cameras under their server', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    const rows = container.querySelectorAll('.tree-servidor');
+    expect(rows).toHaveLength(2);
+    expect(screen.getByText('Primário')).toBeInTheDocument();
+    expect(screen.getByText('Secundário')).toBeInTheDocument();
+    expect(rows[0].querySelector('.badge')?.className).toContain('online');
+    expect(rows[1].querySelector('.badge')?.className).toContain('error');
+    // cada câmera dentro do UL do próprio servidor
+    expect(rows[0].querySelector('.tree-filhos')?.textContent).toContain('Alpha');
+    expect(rows[0].querySelector('.tree-filhos')?.textContent).not.toContain('Beta');
+    expect(rows[1].querySelector('.tree-filhos')?.textContent).toContain('Beta');
+  });
+
+  it('right click and the dots button emit kind server with the base as id', () => {
+    const onAction = vi.fn();
+    const { container } = renderTree(<CameraTree {...props} onAction={onAction} />);
+    fireEvent.contextMenu(container.querySelectorAll('.tree-servidor')[0]);
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'menu', kind: 'server', id: 'http://a', name: 'Primário' }));
+    onAction.mockClear();
+    fireEvent.click(container.querySelectorAll('.tree-servidor .cam-dots')[0]);
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'menu-toggle', kind: 'server', id: 'http://a' }));
+  });
+
+  it('the server row is neither draggable nor a drop target (spec 5.3)', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    const row = container.querySelectorAll('.tree-servidor')[0];
+    expect(row.getAttribute('draggable')).toBeNull();
+  });
+
+  it('text filter hides the server with no match; without filter an empty server stays', () => {
+    const { container, unmount } = renderTree(<CameraTree {...props} filter="Alpha" />);
+    expect(screen.getByText('Primário')).toBeInTheDocument();
+    expect(screen.queryByText('Secundário')).toBeNull();
+    unmount();
+    const withEmpty = renderTree(<CameraTree {...props} servers={[...servers, { id: 'http://vazio', label: 'Vazio', online: true }]} />);
+    expect(withEmpty.container.querySelectorAll('.tree-servidor')).toHaveLength(3);
+    expect(screen.getByText('Vazio')).toBeInTheDocument();
+  });
+
+  it('double click toggles the server subtree (never opens the stage)', () => {
+    const onOpen = vi.fn();
+    const { container } = renderTree(<CameraTree {...props} onOpen={onOpen} />);
+    const row = container.querySelectorAll('.tree-servidor')[0];
+    fireEvent.doubleClick(row);
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(row.querySelector('.tree-filhos')).toBeNull();
+    fireEvent.doubleClick(row);
+    expect(row.querySelector('.tree-filhos')).not.toBeNull();
   });
 });

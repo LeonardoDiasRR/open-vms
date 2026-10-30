@@ -14,9 +14,12 @@ const DEVICE_TYPE = 'application/x-ovms-device';
 
 // recording (spec 2026-10-16): feeds the FULL dot when recording is on
 // ativa (spec 2026-10-27): OPTIONAL so old fixtures keep compiling; absent = active, only `ativa === false` is inactive.
-export type Camera = { id: string; name: string; state: string; group_id?: string | null; device_id?: string | null; recording?: boolean; ativa?: boolean };
-export type Group = { id: string; name: string; parent_id?: string | null };
-export type Kind = 'camera' | 'group' | 'device';
+// server_id (spec 2026-10-30): opcional — sem ele a árvore desenha o plano de sempre (Fase 2→4).
+export type Camera = { id: string; name: string; state: string; group_id?: string | null; device_id?: string | null; recording?: boolean; ativa?: boolean; server_id?: string };
+export type Group = { id: string; name: string; parent_id?: string | null; server_id?: string };
+export type Kind = 'camera' | 'group' | 'device' | 'server';
+// Linha do nó servidor (spec 5.3): rótulo + status do poll (o App mescla o ok, 5.5).
+export type ServerNode = { id: string; label: string; online: boolean };
 // What enters the MULTIPLE selection: the device is a container (amendment E10) and is not markable —
 // only camera and folder enter the `Marked` array.
 type Markable = 'camera' | 'group';
@@ -25,12 +28,13 @@ type Markable = 'camera' | 'group';
 export type Marked = { kind: 'camera' | 'group' | 'layout'; id: string };
 
 type TreeAction = { type: 'menu' | 'menu-toggle'; kind: Kind; id: string; x: number; y: number; name: string; camera?: Camera };
-type Target = { kind: Kind; id: string };
+// O nó servidor NÃO vai ao palco: o Target exclui o kind novo.
+type Target = { kind: Exclude<Kind, 'server'>; id: string };
 
 type Props = {
   groups: Group[];
   cameras: Camera[];
-  devices?: Device[];
+  devices?: (Device & { server_id?: string })[];
   selected?: string | null;
   marked?: Marked[];
   onSelect: (id: string) => void;
@@ -38,7 +42,12 @@ type Props = {
   onAction: (a: TreeAction) => void;
   onDrop: (d: DropPayload) => void;
   onOpen?: (n: Target) => void;
-  onAdd?: () => void;
+  // spec 2026-10-30: o "+" da seção CONECTA SERVIDOR (sem portão — D4); o antigo onAdd (wizard)
+  // migrou para o menu de contexto do nó servidor (D6).
+  onConnectServer?: () => void;
+  // Nós raiz por servidor (spec 5.3). Sem o prop, a árvore desenha o plano de sempre — é o estado
+  // de transição até o App passar a lista na Fase 4.
+  servers?: ServerNode[];
   filter?: string;
   // spec 2026-10-18 (header filters). The folder signal is worth BOTH trees: the App increments `n`
   // on every click and `open` says the mode; each tree closes/opens its own folders in the effect.
@@ -61,7 +70,7 @@ const STATUS_KEYS = {
 // the visible range). The drag carries a CSV of ids per format in the dataTransfer.
 // The component only renders: whoever decides the actions talks to the server via onAction/onDrop.
 // Double click goes up through onOpen (the App takes the camera/folder to the wall).
-export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onAdd, filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
+export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onConnectServer, servers = [], filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
   const { t } = useT();
   // ponytail: open by default — a new folder with the camera inside already shows open, with no
   // second click to find out where the camera went
@@ -81,40 +90,38 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
 
   const isMarked = (kind: Markable, id: string) => marked.some((m) => m.kind === kind && m.id === id);
 
-  // Recording filter BEFORE the text one: folders without a match follow the same rule as the
-  // SearchField (they vanish while a filter is active) and the Shift range keeps reading only what
-  // is visible (spec 2026-10-18).
-  const recordingMatch = recordingFilter ? cameras.filter((c) => !!c.recording === (recordingFilter === 'with')) : cameras;
-
-  // The filter is derived from the data in memory: no debounce and no server call (spec 3.4).
-  // Declared up here because the Shift range (in `handleClick`, below) also reads the VISIBLE tree.
-  const { groups: filteredGroups, cameras: visibleCameras } = filterCameras(groups, recordingMatch, filter);
   const isFiltering = filter.trim() !== '' || recordingFilter !== null;   // empty or blank filter = today's behavior (spec 4.2)
 
-  // With the recording filter a folder with no camera left vanishes — same rule as the text filter
-  // (which filterCameras already does), otherwise the empty folder would appear FORCED open under
-  // the filter (spec 2026-10-18).
-  let visibleGroups = filteredGroups;
-  if (recordingFilter) {
-    const byId = new Map(groups.map((g) => [g.id, g]));
-    const keepers = new Set<string>();
-    for (const c of visibleCameras) {
-      let current: string | null | undefined = c.group_id;
-      while (current && !keepers.has(current)) { keepers.add(current); current = byId.get(current)?.parent_id; }  // walks up to the ancestors; a cycle does not hang
+  // The VISIBLE view of one slice — the flat list of always, or the slice of a server (spec 5.3):
+  // recording filter BEFORE the text one (folders without a match vanish while filtering,
+  // spec 2026-10-18), then the recording keepers, then the devices without a visible child.
+  // The filter is derived from the data in memory: no debounce, no server call (spec 3.4).
+  function viewFor(g0: Group[], c0: Camera[], d0: (Device & { server_id?: string })[]) {
+    const recordingMatch = recordingFilter ? c0.filter((c) => !!c.recording === (recordingFilter === 'with')) : c0;
+    const { groups: filteredGroups, cameras: visibleCameras } = filterCameras(g0, recordingMatch, filter);
+    let visibleGroups = filteredGroups;
+    if (recordingFilter) {
+      const byId = new Map(g0.map((g) => [g.id, g]));
+      const keepers = new Set<string>();
+      for (const c of visibleCameras) {
+        let current: string | null | undefined = c.group_id;
+        while (current && !keepers.has(current)) { keepers.add(current); current = byId.get(current)?.parent_id; }  // walks up to the ancestors; a cycle does not hang
+      }
+      visibleGroups = filteredGroups.filter((g) => keepers.has(g.id));
     }
-    visibleGroups = filteredGroups.filter((g) => keepers.has(g.id));
+    // With a filter active a device with no visible child does not appear; without a filter it stays:
+    // a device with no children is a real state and must remain reachable.
+    const visibleDevices = isFiltering ? d0.filter((d) => visibleCameras.some((c) => c.device_id === d.id)) : d0;
+    return { groups: visibleGroups, cameras: visibleCameras, devices: visibleDevices };
   }
 
-  // With a filter active a device with no visible child does not appear (same rule as the folder
-  // left without a match); without a filter it stays: a device with no children is a real state and
-  // must remain reachable.
-  const visibleDevices = isFiltering ? devices.filter((d) => visibleCameras.some((c) => c.device_id === d.id)) : devices;
+  const flat = viewFor(groups, cameras, devices);
 
   // plain click = just the item (camera opens the right panel); Ctrl = toggles (without touching the
   // panel); Shift = visible range from the anchor (the first marked one) up to it.
   function handleClick(e: MouseEvent, kind: Markable, id: string) {
     if (e.shiftKey) {
-      const rows = flatten(buildTree(visibleGroups, visibleCameras, visibleDevices), closed);
+      const rows = flatten(buildTree(flat.groups, flat.cameras, flat.devices), closed);
       onMark(range(rows, marked[0]?.id ?? id, id));
       if (kind === 'camera') onSelect(id);
       return;
@@ -345,14 +352,76 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
     );
   }
 
-  const nodes = buildTree(visibleGroups, visibleCameras, visibleDevices);
+  // Linha do nó servidor (spec 5.3): ícone 🖥, rótulo, ponto de status (o .badge das câmeras), ⋯.
+  // Sem drag do nó, sem drop no nó, sem palco: duplo-clique só expandre/recolhe.
+  function renderServer(s: ServerNode, childNodes: TreeNode<Camera>[]) {
+    const open = !closed.includes(s.id);
+    return (
+      <li
+        key={s.id}
+        className="tree-row tree-servidor"
+        onDoubleClick={() => toggle(s.id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // ponytail: the .cam-dots button always exists on this row; the ! only tells TS that
+          const r = e.currentTarget.querySelector('.cam-dots')!.getBoundingClientRect();
+          onAction({ type: 'menu', kind: 'server', id: s.id, x: r.right, y: r.bottom, name: s.label });
+        }}
+      >
+        <span className="tree-cabeca">
+          <span
+            className="tree-alca" role="button" tabIndex={0}
+            aria-label={open ? t('cameras.collapse', { name: s.label }) : t('cameras.expand', { name: s.label })}
+            aria-expanded={open}
+            onClick={(e) => { e.stopPropagation(); toggle(s.id); }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(s.id); } }}
+          >
+            {open ? '▾' : '▸'}
+          </span>
+          <span className="tree-icone" aria-hidden="true">🖥</span>
+          <span className="tree-nome">{s.label}</span>
+          {/* o ponto de status REUSA o .badge das câmeras (.online/.error) — Task 3.3 */}
+          <span className={`badge${s.online ? ' online' : ' error'}`} role="img"
+            aria-label={s.online ? t('cameras.status.online') : t('cameras.status.offline')}
+            title={s.online ? t('cameras.status.online') : t('cameras.status.offline')} />
+          <button
+            type="button"
+            className="cam-dots"
+            aria-label={t('cameras.options', { name: s.label })}
+            title={t('cameras.options', { name: s.label })}
+            aria-haspopup="menu"
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              const r = e.currentTarget.getBoundingClientRect();
+              onAction({ type: 'menu-toggle', kind: 'server', id: s.id, x: r.right, y: r.bottom, name: s.label });
+            }}
+          >
+            ⋯
+          </button>
+        </span>
+        {open && childNodes.length > 0 && <ul className="tree-filhos">{childNodes.map(renderNode)}</ul>}
+      </li>
+    );
+  }
+
+  const nodes = buildTree(flat.groups, flat.cameras, flat.devices);
+  // Uma sub-árvore por servidor com os dados daquele server_id (spec 5.3): buildTree/filterCameras
+  // chamados por servidor, nunca sobre a lista mescla.
+  const serverViews = servers.map((s) => ({
+    server: s,
+    view: viewFor(groups.filter((g) => g.server_id === s.id), cameras.filter((c) => c.server_id === s.id), devices.filter((d) => d.server_id === s.id)),
+  }));
   return (
     <>
       {/* "Cameras" section: the tree existed with no header at all (the Layouts one has its own).
          Without the .tree-cabeca class on purpose: it carries flex-basis:100%, which in the sidebar
          column becomes 100% of the HEIGHT and swallows the screen (defect fixed on 2026-10-15) */}
       <div className="tree-secao">
-        <span className="tree-nome">{t('cameras.title')}</span>
+        {/* plan 2026-10-30: a seção de câmeras passou a ser a de SERVIDORES (requisito 4) */}
+        <span className="tree-nome">{t('servers.title')}</span>
         {/* spec 2026-10-18 (filters): the 📁 opens/closes the folders of BOTH sections; the dot cycles
             recording (all -> with -> without). The state lives in the App — here the component only
             renders. */}
@@ -385,15 +454,20 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
             <span className={`badge${recordingFilter ? ' online' : ''}${recordingFilter === 'with' ? ' cheia' : ''}`} aria-hidden="true" />
           </button>
         )}
-        {onAdd && (
-          <button type="button" className="cam-dots mini-cta" title={t('cameras.add')} aria-label={t('cameras.add')} onClick={onAdd}>+</button>
-        )}
+        {/* spec 5.3/D4: o + conecta servidor e NÃO tem portão de capacidade — sempre visível */}
+        <button type="button" className="cam-dots mini-cta" title={t('servers.add')} aria-label={t('servers.add')} onClick={onConnectServer}>+</button>
       </div>
       {/* ponytail: the container is the drop area of the ROOT — the child drop stops propagation, so
           dropping inside a folder does not become "drop on the root" */}
       <ul className="tree" onDragEnd={() => setHovered(null)} onDragOver={acceptDrag} onDrop={(e) => handleDrop(e, null)}>
-        {nodes.length === 0 && <EmptyState as="li" className="muted" message={t('cameras.empty')} />}
-        {nodes.map(renderNode)}
+        {servers.length === 0 && nodes.length === 0 && <EmptyState as="li" className="muted" message={t('cameras.empty')} />}
+        {servers.length === 0 && nodes.map(renderNode)}
+        {serverViews.map(({ server, view }) => {
+          // filtro ativo: servidor sem NENHUM match some (regra da pasta); sem filtro, servidor
+          // vazio aparece — é estado real (spec 5.3)
+          if (isFiltering && view.cameras.length === 0 && view.groups.length === 0) return null;
+          return renderServer(server, buildTree(view.groups, view.cameras, view.devices));
+        })}
       </ul>
       {/* empty strip: dropping here raises camera(s) or folder to the root (target null) */}
       <div className="tree-raiz" onDragOver={acceptDrag} onDrop={(e) => handleDrop(e, null)} />
