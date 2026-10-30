@@ -903,7 +903,9 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .nx-check .nx-switch[disabled] { opacity: .5; cursor: not-allowed; }
 
 .nx-help { display: inline-grid; place-items: center; width: 14px; height: 14px; border: 1px solid var(--border); border-radius: 50%; font-size: 10px; cursor: help; }
-.nx-help-pop { position: absolute; top: 34px; left: 0; z-index: 2; min-width: 230px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; }
+/* 2026-10-30: antes top 34px — o popover ficava POR CIMA do input do proprio campo. Agora cola
+   abaixo do campo (.nx-field e relative; 100% = embaixo do input). */
+.nx-help-pop { position: absolute; top: calc(100% + 4px); left: 0; z-index: 2; min-width: 230px; padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 12px; }
 .nx-help-pop ul { margin: 6px 0 0; padding-left: 16px; }
 
 .nx-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
