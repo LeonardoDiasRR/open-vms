@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { ApiClient } from '@/shared/utils/api';
 import LoginPage from '@/features/auth/pages/LoginPage';
 import ForcedPasswordChange from '@/features/auth/components/TrocaSenhaObrigatoria';
@@ -16,7 +16,9 @@ import UserMenu from '@/shared/ui/UserMenu';
 import { directCameras } from '@/shared/domain/groups';
 import { makeCan, type Capability } from '@/shared/domain/capabilities';
 import { urlReStreaming } from '@/features/cameras/services/reStreaming';
-import { useCameras, cameraMenuItems } from '@/shared/hooks/useCameras';
+import { useCameras, cameraMenuItems, serverMenuItems } from '@/shared/hooks/useCameras';
+import { useServers } from '@/shared/hooks/useServers';
+import AddServerModal from '@/features/servers/components/AddServerModal';
 import type { DropPayload } from '@/shared/hooks/useCameras';
 import { useLayouts, layoutMenuItems } from '@/features/layouts/hooks/useLayouts';
 import { usePanels, clampWidth, maxWidth, MIN_WIDTH, DEFAULT_WIDTH, type Side } from '@/shared/hooks/usePaineis';
@@ -44,10 +46,10 @@ type Session = { api: ApiClient; user: string; profile: string; capabilities: Ca
 // Target of the double click in the camera/folder/DVR tree (spec 2026-10-17, 1.3a).
 type Target = { kind: 'camera' | 'group' | 'device'; id: string };
 // Actions that climb from the trees to the menu (same shape as CameraTree's and LayoutTree's onAction).
-type CameraAction = { type: 'menu' | 'menu-toggle'; kind: 'camera' | 'group' | 'device'; id: string; x: number; y: number; name: string };
+type CameraAction = { type: 'menu' | 'menu-toggle'; kind: 'camera' | 'group' | 'device' | 'server'; id: string; x: number; y: number; name: string };
 type LayoutAction = { type: 'menu'; kind: 'layout'; id: string; name?: string; x: number; y: number };
 // Stored menu: id/name are string (the null sentinel of the root went away with the root menu).
-type Menu = { type: 'menu' | 'menu-toggle'; kind: 'camera' | 'group' | 'device' | 'layout'; id: string; name: string; x: number; y: number };
+type Menu = { type: 'menu' | 'menu-toggle'; kind: 'camera' | 'group' | 'device' | 'layout' | 'server'; id: string; name: string; x: number; y: number };
 
 export default function App() {
   const { t, tn, lang, setLang } = useT();
@@ -55,7 +57,8 @@ export default function App() {
   const [mode, setMode] = useState<Mode>('live');
   const [selected, setSelected] = useState<string | null>(null);
   const [marked, setMarked] = useState<Marked[]>([]); // multiple selection: {kind: 'camera'|'group'|'layout', id} pairs
-  const [wizard, setWizard] = useState(false);
+  const [wizard, setWizard] = useState<string | null>(null); // base do servidor do wizard de câmera (D6)
+  const [connectOpen, setConnectOpen] = useState(false);      // AddServerModal
   const [menu, setMenu] = useState<Menu | null>(null);   // {kind, id, x, y, name}
   // side panels: state + persistence (the hook reads/writes openvms.panels). `widths` is the EXPLICIT
   // width from the drag (spec 2026-10-17, 1.2): absent = the CSS default.
@@ -90,12 +93,41 @@ export default function App() {
   // CAN_INSTALL profile list is gone. makeCan builds one Set per render; an 8-item Set does not
   // deserve a memo (the lookups themselves are O(1)).
   const can: (cap: Capability) => boolean = session ? makeCan(session.capabilities) : () => false;
-  const { cameras, devices, groups, rtsp, connection, refresh: refreshCameras, reset: resetCameras, move } = useCameras(cli);
+  // Registry (spec 5.1): o primário é o api da sessão; o boot-restore dos extras mora no hook e só
+  // roda com sessão (sem primário não se monta extra — 5.1). reset = logout limpa extras e tokens.
+  const { servers, addServer, disconnectServer, renameServer, reset: resetServers, apiFor } =
+    useServers(session ? session.api : null);
+  const { cameras, devices, groups, rtsp, rtspByServer, connection, connections, refresh: refreshCameras, reset: resetCameras, move } =
+    useCameras(servers.length ? servers.map(({ id, api }) => ({ id, api })) : null);
   const { layouts, openRequest, openOnStage, consumeRequest, refreshLayouts, handleLayoutAction } = useLayouts(cli);
 
   // PTZ state belongs to the App (spec 2026-10-17): the right panel and the cell show the same panel,
   // and only one camera is armed at a time.
-  const ptz = usePtz(session ? session.api : null);
+  // PTZ (5.6): cada comando resolve o servidor da câmera armada NO MOMENTO do comando — o App não
+  // conhece a câmera armada antes do usePtz devolver, e o hook lê o api por ref de qualquer forma.
+  // A facade é estável: a identidade nunca rearma o instrumento do hook.
+  const apiForRef = useRef(apiFor); apiForRef.current = apiFor;
+  const camerasRef = useRef(cameras); camerasRef.current = cameras;
+  const sessionRef = useRef(session); sessionRef.current = session;
+  const ptzApi = useMemo(() => {
+    const of = (id: string) => apiForRef.current(camerasRef.current.find((c) => c.id === id)?.server_id)
+      ?? sessionRef.current?.api ?? null;
+    // rejection LAZY (deviation): created at memo time it would sit unhandled on every mount
+    const noServer = () => Promise.reject(new Error('no server'));
+    return {
+      ptzMove: (id: string, v: never) => { const a = of(id); return a ? a.ptzMove(id, v) : noServer(); },
+      ptzStop: (id: string) => { const a = of(id); return a ? a.ptzStop(id) : noServer(); },
+      ptzCapability: (id: string, refresh?: boolean) => { const a = of(id); return a ? a.ptzCapability(id, refresh) : noServer(); },
+      ptzPositions: (id: string) => { const a = of(id); return a ? a.ptzPositions(id) : noServer(); },
+      ptzSavePosition: (id: string) => { const a = of(id); return a ? a.ptzSavePosition(id) : noServer(); },
+      ptzGoToPosition: (id: string, position: number) => { const a = of(id); return a ? a.ptzGoToPosition(id, position) : noServer(); },
+      ptzRenamePosition: (id: string, position: number, name: string) => { const a = of(id); return a ? a.ptzRenamePosition(id, position, name) : noServer(); },
+      ptzDeletePosition: (id: string, position: number) => { const a = of(id); return a ? a.ptzDeletePosition(id, position) : noServer(); },
+      ptzZoomArea: (id: string, box: never) => { const a = of(id); return a ? a.ptzZoomArea(id, box) : noServer(); },
+      ptzUndoZoom: (id: string) => { const a = of(id); return a ? a.ptzUndoZoom(id) : noServer(); },
+    };
+  }, []);
+  const ptz = usePtz(ptzApi);
   const ptzCamera = ptz.cameraId ? cameras.find((c) => c.id === ptz.cameraId) : null;
 
   // ---- panel drag handle (spec 2026-10-17, item 1.2) ----
@@ -140,6 +172,7 @@ export default function App() {
     if (!session) return;
     session.api.logout();
     sessionStorage.removeItem(TOKEN_KEY);
+    resetServers(); // spec 5.4 + emenda: o logout derruba os extras (os aliases ficam — preferência)
     setSession(null);
     resetCameras();
     // spec 2026-10-17: the stage and Archive playback state live in the VIEW MODULES — logging out has
@@ -175,12 +208,40 @@ export default function App() {
     } catch (e) { notify(e instanceof Error ? e.message : t('app.action_failed'), 'error'); }
   }
 
+  // Servidor do alvo do menu (5.6): a lookup espelha groupOf — câmera/DVR/pasta pela lista mescla.
+  function serverIdOf(a: Menu): string | undefined {
+    if (a.kind === 'camera') return cameras.find((c) => c.id === a.id)?.server_id;
+    if (a.kind === 'device') return devices.find((d) => d.id === a.id)?.server_id;
+    if (a.kind === 'group') return groups.find((g) => g.id === a.id)?.server_id;
+    return undefined;
+  }
+
+  // Menu do nó servidor (5.4). Primário OU último conectado: desconectar é logout (requisito 3 + D5).
+  async function serverAction(id: string, target: Menu) {
+    if (id === 'rename-server') {
+      const name = await dlg.ask(t('cameras.rename_prompt'), t('shared.name'), target.name);
+      if (name && name !== target.name) renameServer(target.id, name); // alias local — nunca no backend
+    } else if (id === 'disconnect-server') {
+      const entry = servers.find((s) => s.id === target.id);
+      const go = await dlg.confirm(t('servers.disconnect'),
+        [entry?.primary ? t('servers.disconnect_primary_confirm') : t('servers.disconnect_confirm', { name: target.name })],
+        { danger: true });
+      if (!go) return; // sem confirmar, nada faz (5.4)
+      if (entry?.primary || servers.length === 1) logout();
+      else disconnectServer(target.id); // remove entrada, token e alias; as células caem em slot-empty s/ código novo
+    } else if (id === 'add-camera') {
+      setWizard(target.id); // D6: o wizard abre COM o api deste servidor
+    }
+  }
+
   // the menu closes BEFORE the dialog opens — nothing stays stuck behind the modal.
   async function act(id: string) {
     const target = menu;
     setMenu(null);
     if (!target || !session) return;
-    const api = session.api;
+    if (target.kind === 'server') { await serverAction(id, target); return; } // o api próprio não se PATCH-a
+    // 5.6: PATCH/DELETE de câmera/pasta/DVR vão ao SERVIDOR do alvo (fallback no primário)
+    const api = apiFor(serverIdOf(target));
     // it is only a batch when the menu was opened on an item OF the selection and there is more than one
     const selection = marked.length > 1 && marked.some((m) => m.kind === target.kind && m.id === target.id) ? marked : null;
     try {
@@ -369,6 +430,7 @@ export default function App() {
   // toggle read it; the tolerant rule lives in cameraMenuItems — only false is inactive).
   const menuItems = (m: Menu): ItemMenu[] => (
     m.kind === 'layout' ? layoutMenuItems(m, marked, { t }, can)
+      : m.kind === 'server' ? serverMenuItems(m, { t }, can)
       : cameraMenuItems({ ...m, ativa: cameras.find((c) => c.id === m.id)?.ativa }, marked, groupOf(m) != null, { t, tn }, can)
   );
 
@@ -403,6 +465,11 @@ export default function App() {
   if (window.location.pathname === '/design') return <DesignCatalog />;
 
   const online = cameras.filter((c) => c.state === 'online').length;
+  // O banner nomeia o PRIMEIRO servidor que falhou (5.5): a falha vem do poll, o rótulo do registry.
+  const failing = connections.find((c) => !c.ok);
+  const bannerMessage = failing
+    ? `${servers.find((s) => s.id === failing.serverId)?.label ?? failing.serverId}: ${failing.message ?? t('shared.connection_failed')}`
+    : connection.message;
   return (
     <div className={`shell${collapsed.left ? ' rec-esq' : ''}${collapsed.right && !ptzCamera ? ' rec-dir' : ''}`}
       style={shellStyle} ref={shellRef}>
@@ -458,8 +525,9 @@ export default function App() {
           onAction={openMenu}
           onDrop={onDrop}
           onOpen={openOnWall}
-          // same gate as the "+ Add camera" button in the footer: only whoever installs cameras sees the "+"
-          onAdd={can('camera.manage.global') ? () => setWizard(true) : undefined}
+          // spec 5.3: o App MESCLA o ok do poll no array que desce (useServers não conhece o poll)
+          servers={servers.map((s) => ({ id: s.id, label: s.label, online: connections.find((c) => c.serverId === s.id)?.ok ?? false }))}
+          onConnectServer={() => setConnectOpen(true)}
           filter={filter}
           devices={devices}
           folderSignal={folderSignal}
@@ -481,9 +549,6 @@ export default function App() {
           recordingFilter={recordingFilter}
         />
         </div>
-        {can('camera.manage.global') && (
-          <button className="add-camera" onClick={() => setWizard(true)}>{t('cameras.add_action')}</button>
-        )}
       </aside>
 
       {/* left panel divider (spec 2026-10-17, item 1.2): it occupies the 2px track between the panel and
@@ -492,16 +557,16 @@ export default function App() {
 
       {/* C · main scene */}
       <main className="scene">
-        {!connection.ok && <div className="banner">{connection.message}</div>}
+        {!connection.ok && <div className="banner">{bannerMessage}</div>}
         {mode === 'live' && (
-          <LiveView api={session.api} cameras={cameras} groups={groups} ptz={ptz}
+          <LiveView api={session.api} apiFor={apiFor} cameras={cameras} groups={groups} ptz={ptz}
             layouts={layouts} openRequest={openRequest} onConsumeRequest={consumeRequest}
             onLayoutsChanged={refresh}
             onConfig={(id: string, name: string) => setConfig({ id, name })}
             onRename={renameFromStage} onToggleActive={toggleActiveFromStage} canManageCameras={can('camera.manage')} />
         )}
         {mode === 'archive' && (
-          <ArchiveView api={session.api} cameras={cameras} groups={groups} layouts={layouts}
+          <ArchiveView api={session.api} apiFor={apiFor} cameras={cameras} groups={groups} layouts={layouts}
             openRequest={openRequest} onRequestConsumed={consumeRequest} onLayoutsChanged={refresh}
             onExportsChanged={onExportsChanged} canExport={can('camera.manage')}
             onConfig={(id: string, name: string) => setConfig({ id, name })}
@@ -548,24 +613,36 @@ export default function App() {
         <span className={connection.ok ? 'ok' : 'warn'}>
           {connection.ok ? `● ${t('cameras.status.online')}` : `⚠ ${connection.message}`}
         </span>
-        <span>{t('app.server', { host: localStorage.getItem(SERVER_KEY) ?? '' })}</span>
+        <span>{t('servers.count', { n: servers.length })} · {servers[0]?.label ?? localStorage.getItem(SERVER_KEY) ?? ''}</span>
         <span>{t('cameras.title')}: {online} / {cameras.length} {t('cameras.status.online')}</span>
       </footer>
 
       {wizard && (
         // ponytail: no onAdded — the dialog stays open showing what just came in; the sidebar updates on the 5s poll
-        <AddDeviceWizard api={session.api} onClose={() => setWizard(false)} />
+        <AddDeviceWizard api={apiFor(wizard)} onClose={() => setWizard(null)} />
+      )}
+      {/* conecta servidor (spec 5.2): sem portão (D4); a lista de bases vivas fecha a duplicata */}
+      {connectOpen && (
+        <AddServerModal existingBases={servers.map((s) => s.id)} onSubmit={addServer} onClose={() => setConnectOpen(false)} />
       )}
 
-      {config && (
-        <CameraSettingsModal api={session.api} dlg={dlg} camera={config} onClose={() => setConfig(null)}
-          // the Recording tab is editable by whoever administers cameras globally (measured: the POLICY of
-          // PATCH /api/v1/cameras/:id is `camera.manage`, admin and operator);
-          canEdit={can('camera.manage.global')}
-          reStreaming={rtsp && rtsp.enabled
-            ? urlReStreaming({ user: session.user, host: window.location.hostname, port: rtsp.port, cameraId: config.id })
-            : null} />
-      )}
+      {config && (() => {
+        // 5.6: as settings falam com o servidor da câmera e o re-streaming usa o hub RTSP DELE
+        // (host = hostname da base; porta = o rtsp.port daquele servidor no poll de 5.5)
+        const cam = cameras.find((c) => c.id === config.id);
+        const srv = apiFor(cam?.server_id);
+        const r = rtspByServer[srv.base] ?? rtsp;
+        const hostOf = (base: string) => { try { return new URL(base).hostname; } catch { return base; } };
+        return (
+          <CameraSettingsModal api={srv} dlg={dlg} camera={config} onClose={() => setConfig(null)}
+            // the Recording tab is editable by whoever administers cameras globally (measured: the POLICY of
+            // PATCH /api/v1/cameras/:id is `camera.manage`, admin and operator);
+            canEdit={can('camera.manage.global')}
+            reStreaming={r && r.enabled
+              ? urlReStreaming({ user: session.user, host: hostOf(srv.base), port: r.port, cameraId: config.id })
+              : null} />
+        );
+      })()}
 
       {/* E8: the App's PromptDialog goes down as a prop (the administration's destructive confirmations)
           and sits in front of the modal backdrop — it is mounted LATER in the tree. */}

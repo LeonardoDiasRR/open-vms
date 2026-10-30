@@ -34,8 +34,10 @@ const fakes = vi.hoisted(() => ({
 vi.mock('@/shared/utils/api', () => ({
   ApiClient: class {
     token: string | null = null;
-    constructor(_server: string) {}
-    cameras = async () => fakes.cameras;
+    constructor(server: string) { this.base = server; } // plan 2026-10-30: o fake responde POR base (Edição C)
+    cameras = async () => (this.base === 'http://srv2:7102'
+      ? [{ id: 'c9', name: 'Cam 9', state: 'online', profile_ids: [] }]
+      : fakes.cameras);
     base = 'http://x';
     // ponytail: the Archive tab mounts ArchiveView and the exports section; the double answers the minimum
     // both screens read (empty timeline + one finished export).
@@ -47,7 +49,7 @@ vi.mock('@/shared/utils/api', () => ({
     devices = async () => fakes.devices;
     groups = async () => fakes.groups;
     health = async () => 'ok';
-    rtsp = async () => null;
+    rtsp = async () => (this.base === 'http://srv2:7102' ? { enabled: true, port: 9555, active: [] } : null);
     layouts = async () => fakes.layouts;
     profiles = async () => [{ id: 'p1', camera_id: 'c1', name: 'Main', width: 1920, height: 1080 }];
     liveToken = async () => ({ whep_url: '', token: '', expires_in: 60 });
@@ -92,6 +94,17 @@ vi.mock('@/shared/utils/api', () => ({
   },
 }));
 
+// plan 2026-10-30: a URL de re-streaming é calculada NO App; o mock registra os argumentos (host/porta
+// do servidor da câmera) sem depender do conteúdo do CameraSettingsModal.
+vi.mock('@/features/cameras/services/reStreaming', () => ({
+  urlReStreaming: vi.fn((o: { user: string; host: string; port: number | string | null; cameraId: string }) =>
+    `rtsp://MOCK/${o.host}:${o.port}/${o.cameraId}`),
+}));
+vi.mock('@/features/cameras/pages/CameraSettingsModal', () => ({
+  default: ({ reStreaming }: { reStreaming: string | null }) =>
+    <div role="dialog" data-testid="csm">{reStreaming ?? ''}</div>,
+}));
+
 import App from './App';
 import { LanguageProvider } from '@/shared/i18n';
 // only the TYPE (erased at compile): the real module is the `vi.mock` above — the new cases' cast needs the
@@ -118,6 +131,9 @@ beforeEach(() => {
   localStorage.setItem('openvms.server', 'http://x');
   localStorage.removeItem('openvms.panels'); // each case chooses the preference it wants to measure
   localStorage.setItem('openvms.lang', 'en'); // product default is pt-BR; this suite asserts English; each language case chooses its own
+  sessionStorage.removeItem('openvms.servers');
+  sessionStorage.removeItem('openvms.server.http://srv2:7102.token');
+  localStorage.removeItem('openvms.serverNames');
   sessionStorage.setItem('openvms.token', 'tk');
   vi.clearAllMocks();
   fakes.cameras = [{ id: 'c1', name: 'Cam 1', state: 'online', profile_ids: [], can_control: true }];
@@ -727,7 +743,7 @@ describe('topbar user menu and statusbar (spec 2026-10-18)', () => {
     const { container } = renderApp();
     await screen.findByText('● online', {}, { timeout: 8000 });
     const spans = Array.from(container.querySelectorAll('.statusbar span')).map((s) => s.textContent);
-    expect(spans).toEqual(['● online', 'Server: http://x', 'Cameras: 1 / 1 online']);
+    expect(spans).toEqual(['● online', '1 servers · x', 'Cameras: 1 / 1 online']);
     expect(screen.queryByText(/server v/)).toBeNull();
     expect(screen.queryByText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/)).toBeNull();
   });
@@ -1000,12 +1016,13 @@ describe('capability gates in the App shell (phase 4)', () => {
     expect(container.querySelector('.painel-exports')).toBeNull();
   });
 
-  it('the eight capabilities: the add-camera button and the exports panel are there', async () => {
+  it('the eight capabilities: the connect-server + and the exports panel are there (the footer add-camera is gone — D6)', async () => {
     fakes.meCaps = ALL_CAPS;
     const { container } = renderApp();
     await waitFor(() => expect(container.querySelector('ul.tree')).toBeTruthy());
     await within(container.querySelector('ul.tree') as HTMLElement).findByText('Cam 1');
-    expect(screen.getByText('+ Add camera')).toBeInTheDocument();
+    expect(screen.queryByText('+ Add camera')).toBeNull(); // saiu do rodapé; vive no menu do nó servidor
+    expect(screen.getByTitle('Connect server')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(container.querySelector('.painel-exports h2')).toBeTruthy());
     expect(container.querySelector('.painel-exports h2')?.textContent).toBe('Recent exports');
@@ -1067,5 +1084,92 @@ describe('camera ativa actions (plan 2026-10-27, task 5.1)', () => {
     fireEvent.contextMenu(await screen.findByText('Cam 1'));
     expect(await screen.findByText('Activate camera')).toBeInTheDocument();
     expect(screen.queryByText('Deactivate camera')).toBeNull();
+  });
+});
+
+// plan 2026-10-30 (multi-server): o shell do App com o registry.
+// waitFor só repete quando o callback LANÇA: um `() => document.querySelector(...)` que devolve
+// null resolve na hora e o fireEvent recebe null (measured). O helper lança até a linha existir.
+const waitServerRow = async () => waitFor(() => {
+  const r = document.querySelector('.tree-servidor');
+  if (!r) throw new Error('server row not rendered yet');
+  return r;
+});
+describe('servers in the App shell (plan 2026-10-30)', () => {
+  it('the primary renders as the server root row of the tree (hostname label)', async () => {
+    const { container } = renderApp();
+    await waitFor(() => expect(container.querySelectorAll('.tree-servidor')).toHaveLength(1));
+    expect(within(container.querySelector('.tree-servidor') as HTMLElement).getByText('x')).toBeInTheDocument();
+  });
+
+  it('server menu: Rename, Disconnect (danger) and Add camera for the global operator', async () => {
+    renderApp();
+    const row = await waitServerRow();
+    fireEvent.contextMenu(row);
+    expect(await screen.findByText('Rename server')).toBeInTheDocument();
+    expect(screen.getByText('Disconnect server')).toBeInTheDocument();
+    expect(screen.getByText('Add camera')).toBeInTheDocument();
+  });
+
+  it('server menu without camera.manage.global: no Add camera', async () => {
+    fakes.meCaps = ['camera.view'];
+    renderApp();
+    const row = await waitServerRow();
+    fireEvent.contextMenu(row);
+    expect(await screen.findByText('Rename server')).toBeInTheDocument();
+    expect(screen.queryByText('Add camera')).not.toBeInTheDocument();
+  });
+
+  it('disconnect primary: the confirmation says the session ends, the confirm returns to login', async () => {
+    renderApp();
+    const row = await waitServerRow();
+    fireEvent.contextMenu(row);
+    fireEvent.click(await screen.findByText('Disconnect server'));
+    expect(await screen.findByText('This is the login server. Disconnecting ends the whole session and returns to the login screen.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Sign in to OpenVMS')).toBeInTheDocument();
+  });
+
+  it('the connect + opens the AddServerModal with IP and Port', async () => {
+    renderApp();
+    fireEvent.click(await screen.findByTitle('Connect server'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText('IP')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Port')).toBeInTheDocument();
+  });
+
+  it('boot restores the saved extra as a second root', async () => {
+    sessionStorage.setItem('openvms.servers', JSON.stringify(['http://srv2:7102']));
+    sessionStorage.setItem('openvms.server.http://srv2:7102.token', 'tk2');
+    const { container } = renderApp();
+    await waitFor(() => expect(container.querySelectorAll('.tree-servidor')).toHaveLength(2));
+    await within(container.querySelector('ul.tree') as HTMLElement).findByText('srv2');
+  });
+
+  it('rename server: the alias replaces the hostname label', async () => {
+    renderApp();
+    const row = await waitServerRow();
+    fireEvent.contextMenu(row);
+    fireEvent.click(await screen.findByText('Rename server'));
+    const input = await screen.findByLabelText('Name');
+    fireEvent.change(input, { target: { value: 'Galpao' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(await screen.findByText('Galpao')).toBeInTheDocument();
+  });
+
+  it('re-streaming of a secondary camera uses the SECONDARY host and rtsp port (spec case 7)', async () => {
+    sessionStorage.setItem('openvms.servers', JSON.stringify(['http://srv2:7102']));
+    sessionStorage.setItem('openvms.server.http://srv2:7102.token', 'tk2');
+    const { container } = renderApp();
+    // same rule of waitServerRow: waitFor resolves on a null return — it has to throw until the tree exists
+    const tree = await waitFor(() => {
+      const el = container.querySelector('ul.tree');
+      if (!el) throw new Error('tree not rendered yet');
+      return el as HTMLElement;
+    });
+    fireEvent.contextMenu(await within(tree).findByText('Cam 9'));
+    fireEvent.click(await screen.findByText('Camera settings'));
+    const csm = await screen.findByTestId('csm');
+    expect(csm.textContent).toBe('rtsp://MOCK/srv2:9555/c9');
   });
 });
