@@ -28,6 +28,17 @@ describe('AddDeviceWizard', () => {
     expect(screen.getByRole('button', { name: 'Search' })).toBeInTheDocument();
     expect(screen.getByText('Run a search to list the devices')).toBeInTheDocument();
   });
+
+  // pedido 2026-10-30: o tooltip Examples so existe enquanto o mouse (ou o foco) esta sobre o ?
+  it('the Examples popover shows on hover of the ? and hides when the mouse leaves', () => {
+    const { container } = renderWizard(<AddDeviceWizard api={api} onClose={() => {}} />);
+    const help = container.querySelector('.nx-help') as HTMLElement;
+    expect(container.querySelector('.nx-help-pop')).toBeNull();
+    fireEvent.mouseEnter(help);
+    expect(container.querySelector('.nx-help-pop')).not.toBeNull();
+    fireEvent.mouseLeave(help);
+    expect(container.querySelector('.nx-help-pop')).toBeNull();
+  });
 });
 
 describe('AddDeviceWizard: informed port', () => {

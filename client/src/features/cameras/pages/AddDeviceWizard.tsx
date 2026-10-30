@@ -223,8 +223,12 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
               <>
                 <label className="nx-field">
                   <span className="nx-label">{t('cameras.discovery.address')}
+                    {/* pedido 2026-10-30: o popover de exemplos so aparece com o mouse (ou foco de
+                        teclado) sobre o ? — nao e mais um toggle por clique que ficava aberto */}
                     <span className="nx-help" role="button" tabIndex={0} aria-label={t('cameras.discovery.examples')}
-                      title={t('cameras.discovery.examples')} onClick={() => setShowExamples((v) => !v)}>?</span>
+                      title={t('cameras.discovery.examples')}
+                      onMouseEnter={() => setShowExamples(true)} onMouseLeave={() => setShowExamples(false)}
+                      onFocus={() => setShowExamples(true)} onBlur={() => setShowExamples(false)}>?</span>
                   </span>
                   <input className="nx-input" value={fields.address} onChange={updateField('address')}
                     placeholder={t('cameras.discovery.address_placeholder')} spellCheck="false" aria-label={t('cameras.discovery.address')} />
