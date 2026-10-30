@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ApiClient, Camera, Device, Group, Health, Rtsp } from '@/shared/utils/api';
 import { canMove } from '@/shared/domain/groups';
 import type { ItemMenu } from '@/shared/ui/CameraMenu';
@@ -19,65 +19,131 @@ type MenuTarget = { kind: string; id: string; ativa?: boolean };
 // Only what the hook reads: the catalog, health, the poll and the sidebar moves.
 type Api = Pick<ApiClient, 'cameras' | 'devices' | 'health' | 'groups' | 'rtsp' | 'moveCamera' | 'updateGroup' | 'moveDevice'>;
 
-// 5s poll of the catalog (cameras + folders) together with server health, the re-streaming state
-// and the connection banner — it was a single Promise.all in the App, so it is still a single tick:
-// the banner reflects the same call that brought the catalog.
-export function useCameras(api: Api | null) {
-  const { t } = useT();
-  const [cameras, setCameras] = useState<Camera[]>([]);
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [health, setHealth] = useState<Health | null>(null);
-  const [rtsp, setRtsp] = useState<Rtsp | null>(null); // {enabled, port, active} from GET /api/v1/rtsp
-  const [connection, setConnection] = useState<Connection>({ ok: false, message: t('shared.no_connection') });
+// Servidor do poll (spec 2026-10-30, 5.5): id = a base do api (identidade estável).
+export type ServerRef = { id: string; api: Api };
+// Conexão POR servidor: o banner do App nomeia o servidor que falhou (o App tem o rótulo, o hook não).
+export type ServerConnection = { serverId: string; ok: boolean; message: string | null };
 
+// 5s poll do catálogo de CADA servidor (cameras + folders + devices) com health, o estado de
+// re-streaming e a conexão por servidor — um tick só, Promise.allSettled: um servidor que falha
+// mantém a própria última fatia e só ele marca offline (spec 5.5). A saída mescla e etiqueta
+// server_id. `rtsp` = o do primeiro servidor (legado); `rtspByServer` é o contrato novo (5.6).
+// ponytail (transição, emenda 5 do plano): um api pelouro ainda entra como lista de um servidor
+// (id = a base do próprio cliente) — o App só para de passar o legado na Fase 4.
+export function useCameras(servers: ServerRef[] | (Api & { base?: string }) | null) {
+  const { t } = useT();
+  const refs: ServerRef[] = !servers ? []
+    : Array.isArray(servers) ? servers
+    : [{ id: (servers as { base?: string }).base ?? '', api: servers as Api }];
+  const refsRef = useRef(refs); refsRef.current = refs;
+  const idsKey = JSON.stringify(refs.map((r) => r.id));
+
+  // A fatia de cada servidor é substituída inteira; o tick que falha deixa a anterior na mesa.
+  type Slice = { cameras: Camera[]; devices: Device[]; groups: Group[]; rtsp: Rtsp | null; health: Health | null };
+  const [sliceByServer, setSliceByServer] = useState<Record<string, Slice>>({});
+  const [statusByServer, setStatusByServer] = useState<Record<string, ServerConnection>>({});
+
+  // etiqueta server_id só quando existe (o caminho legado sem id deixa as listas como são)
+  const tag = <T extends { id: string }>(list: T[], id: string): T[] => (id ? list.map((x) => ({ ...x, server_id: id })) : list);
+
+  // manual refresh (o move o chama): catálogo + conexão por servidor, sem esperar o tick de 5 s
   const refresh = useCallback(async () => {
-    if (!api) return;
-    try {
+    const rs = await Promise.allSettled(refsRef.current.map(async ({ api }) => {
       const [cams, gs, ds] = await Promise.all([api.cameras(), api.groups(), api.devices().catch(() => [])]);
-      setCameras(cams); setGroups(gs); setDevices(ds);
-    } catch { /* the 5s poll reconnects */ }
-  }, [api]);
+      return { cams, gs, ds };
+    }));
+    rs.forEach((r, i) => {
+      const id = refsRef.current[i].id;
+      if (r.status === 'fulfilled') {
+        setSliceByServer((cur) => {
+          const prev = cur[id];
+          return { ...cur, [id]: { cameras: tag(r.value.cams, id), devices: tag(r.value.ds, id), groups: tag(r.value.gs, id), rtsp: prev?.rtsp ?? null, health: prev?.health ?? null } };
+        });
+        setStatusByServer((cur) => ({ ...cur, [id]: { serverId: id, ok: true, message: null } }));
+      } else {
+        setStatusByServer((cur) => ({ ...cur, [id]: { serverId: id, ok: false, message: r.reason instanceof Error ? r.reason.message : t('shared.connection_failed') } }));
+      }
+    });
+  }, [t]);
 
   useEffect(() => {
-    if (!api) return;
+    if (refsRef.current.length === 0) return;
     let stop = false;
     const tick = async () => {
-      try {
-        // ponytail: rtsp with catch — an old server (no route) cannot take down the whole poll
+      const rs = await Promise.allSettled(refsRef.current.map(async ({ id, api }) => {
+        // ponytail: rtsp with catch — an old server (no route) cannot take down its own slice
         const [cams, h, gs, rt, ds] = await Promise.all([
           api.cameras(), api.health(), api.groups(), api.rtsp().catch(() => null), api.devices().catch(() => []),
         ]);
-        if (stop) return;
-        setCameras(cams);
-        setHealth(h);
-        setGroups(gs);
-        setRtsp(rt);
-        setDevices(ds);
-        setConnection({ ok: true, message: null });
-      } catch (e) {
-        if (!stop) setConnection({ ok: false, message: e instanceof Error ? e.message : t('shared.connection_failed') });
-      }
+        return { id, cams, h, gs, rt, ds };
+      }));
+      if (stop) return;
+      rs.forEach((r, i) => {
+        const id = refsRef.current[i].id;
+        if (r.status === 'fulfilled') {
+          const { cams, h, gs, rt, ds } = r.value;
+          setSliceByServer((cur) => ({ ...cur, [id]: { cameras: tag(cams, id), devices: tag(ds, id), groups: tag(gs, id), rtsp: rt, health: h } }));
+          setStatusByServer((cur) => ({ ...cur, [id]: { serverId: id, ok: true, message: null } }));
+        } else {
+          setStatusByServer((cur) => ({ ...cur, [id]: { serverId: id, ok: false, message: r.reason instanceof Error ? r.reason.message : t('shared.connection_failed') } }));
+        }
+      });
     };
     tick();
-    const id = setInterval(tick, 5000);
-    return () => { stop = true; clearInterval(id); };
-  }, [api, t]);
+    const int = setInterval(tick, 5000);
+    return () => { stop = true; clearInterval(int); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- os apis são lidos do refsRef vivo; só a lista de servidores rearma o intervalo
+  }, [idsKey, t]);
 
-  // logout: the catalog and health go away (the rest of the state stays as it was)
-  const reset = useCallback(() => { setCameras([]); setDevices([]); setHealth(null); }, []);
+  const cameras = useMemo(() => refs.flatMap((r) => sliceByServer[r.id]?.cameras ?? []), [idsKey, sliceByServer]);
+  const devices = useMemo(() => refs.flatMap((r) => sliceByServer[r.id]?.devices ?? []), [idsKey, sliceByServer]);
+  const groups = useMemo(() => refs.flatMap((r) => sliceByServer[r.id]?.groups ?? []), [idsKey, sliceByServer]);
+  // rtsp/health do primeiro servidor = compat com o shell antigo; o contrato novo é o mapa
+  const rtspByServer: Record<string, Rtsp | null> = {};
+  for (const r of refs) rtspByServer[r.id] = sliceByServer[r.id]?.rtsp ?? null;
+  const firstId = refs[0]?.id;
+  const rtsp = firstId !== undefined ? sliceByServer[firstId]?.rtsp ?? null : null;
+  const health = firstId !== undefined ? sliceByServer[firstId]?.health ?? null : null;
 
-  // drop on the sidebar: camera(s) -> folder; folder -> folder (refuses a cycle). Returns the error
-  // message or null — the App only hangs it on the action banner.
-  // Several folders in the payload: only the first (the dragged row) moves — there is no batch
-  // folder-move API; the other groups stay where they are.
+  // Conexões na ordem dos servidores (o nó servidor da árvore lê daqui, spec 5.5). Antes do primeiro
+  // tick: desconectado — o banner inicial do shell antigo era exatamente esse estado.
+  const noConnection: ServerConnection = { serverId: '', ok: false, message: t('shared.no_connection') };
+  const connections: ServerConnection[] = refs.map((r) => statusByServer[r.id] ?? { ...noConnection, serverId: r.id });
+  const polled = refs.map((r) => statusByServer[r.id]).filter((c): c is ServerConnection => !!c);
+  const failing = polled.find((c) => !c.ok);
+  const connection: Connection = polled.length === 0
+    ? { ok: false, message: t('shared.no_connection') }
+    : failing ? { ok: false, message: failing.message } : { ok: true, message: null };
+
+  // logout: o catálogo e a health somem (o resto do estado fica como estava — comportamento antigo)
+  const reset = useCallback(() => { setSliceByServer({}); setStatusByServer({}); }, []);
+
+  // drop na sidebar: câmera(s) → pasta; pasta → pasta (recusa ciclo). Retorna a mensagem de erro ou
+  // null — o App só pendura no banner de ação.
+  // Vários folders no payload: só o primeiro (o arrastado) anda — não existe batch de pasta.
+  // CROSS-SERVER (spec 5.5): uma pasta de destino de OUTRO servidor nunca recebe o move — os ids do
+  // catálogo pertencem ao servidor que os emitiu. Sem server_id (fixtures de um servidor) a regra é
+  // inerte. Drop na raiz (target null) é sempre aceito: a raiz de cada servidor é a raiz dele.
   const move = useCallback(async ({ cameraIds, groupIds, target, device_id }: DropPayload): Promise<string | null> => {
-    if (!api) return null;
+    const list = refsRef.current;
+    if (!list.length) return null;
+    if (target) {
+      const targetServer = groups.find((g) => g.id === target)?.server_id;
+      const sourceServers = device_id ? [devices.find((d) => d.id === device_id)?.server_id]
+        : cameraIds.length ? cameraIds.map((cid) => cameras.find((c) => c.id === cid)?.server_id)
+        : groupIds.map((gid) => groups.find((g) => g.id === gid)?.server_id);
+      if (targetServer && sourceServers.some((s) => s && s !== targetServer)) return t('servers.cross_server_move');
+    }
+    // quem responde o PATCH: o servidor do destino (ou do item movido — o mesmo depois da regra)
+    const targetSid = target ? groups.find((g) => g.id === target)?.server_id
+      : device_id ? devices.find((d) => d.id === device_id)?.server_id
+      : cameraIds.length ? cameras.find((c) => c.id === cameraIds[0])?.server_id
+      : undefined;
+    const api = (list.find((r) => r.id === targetSid) ?? list[0]).api;
     try {
-      // payload PRECEDENCE (spec 1.3b, declared risk): the DVR drag publishes the camera payload
-      // (the children, which the stage reads) AND the device one. When the device one arrives, the
-      // target is the RECORDER: moving the loose children would spread the channels instead of
-      // moving the DVR into the folder.
+      // payload PRECEDENCE (spec 1.3b, declared risk): a drag do DVR publica o payload de câmera
+      // (os filhos, que o palco lê) E o do dispositivo. Quando o do dispositivo chega, o alvo é o
+      // GRAVADOR: mover os filhos soltos espalharia os canais em vez de mover o DVR para a pasta.
       if (device_id) {
         await api.moveDevice(device_id, target);
         await refresh();
@@ -95,9 +161,9 @@ export function useCameras(api: Api | null) {
     } catch (e) {
       return e instanceof Error ? e.message : t('shared.move_failed');
     }
-  }, [api, groups, refresh, t]);
+  }, [cameras, devices, groups, refresh, t]);
 
-  return { cameras, devices, groups, health, rtsp, connection, refresh, reset, move };
+  return { cameras, devices, groups, health, rtsp, rtspByServer, connection, connections, refresh, reset, move };
 }
 
 // Camera/folder/device menu items. Set menu: NO Rename and NO Settings — those belong to a single
@@ -170,5 +236,19 @@ export function cameraMenuItems(m: MenuTarget, marked: MenuTarget[], inGroup = f
   if (allow('camera.manage.global')) items.push({ id: 'create-group', label: inGroup ? t('cameras.create_subgroup') : t('cameras.create_group') });
   if (allow('camera.manage')) items.push({ id: 'rename', label: t('cameras.rename') });
   if (allow('camera.manage')) items.push({ id: 'delete', label: t('cameras.delete_camera'), danger: true });
+  return items;
+}
+
+// Menu do nó servidor (spec 5.4): Rename e Disconnect SEMPRE (Disconnect é o único danger);
+// "Add camera" entra só com camera.manage.global (D6) — o MESMO padrão de `can` opcional de
+// cameraMenuItems: ausente = tudo aberto (o chamador que esquecer o gate degrada, nunca esvazia).
+export function serverMenuItems(m: MenuTarget, { t }: Pick<Translate, 't'>, can?: (cap: Capability) => boolean): ItemMenu[] {
+  const allow = (cap: Capability) => !can || can(cap);
+  const items: ItemMenu[] = [
+    { id: 'rename-server', label: t('servers.rename') },
+    { id: 'disconnect-server', label: t('servers.disconnect'), danger: true },
+  ];
+  if (allow('camera.manage.global')) items.push({ id: 'add-camera', label: t('servers.add_camera') });
+  void m; // o alvo do menu de servidor é sempre um servidor; a assinatura só alinha com os outros builders
   return items;
 }

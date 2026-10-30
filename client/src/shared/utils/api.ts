@@ -41,6 +41,9 @@ export type Camera = {
   can_control?: boolean;
   // Spec 2026-10-27 (camera ativa): absent = active; only `ativa === false` means inactive.
   ativa?: boolean;
+  // Spec 2026-10-30 (multi-server): o hook etiqueta a fatia de cada servidor; additive — os
+  // payloads do backend nunca carregam o campo.
+  server_id?: string;
 };
 // Parent device (spec 2026-10-17): the child camera lives inside it (device_id) and carries the
 // device channel.
@@ -48,6 +51,7 @@ export type Device = {
   id: string; name: string; kind?: string; addresses?: Address[]; channels?: number[];
   credential_ref?: string; onvif?: Onvif | null; created_at?: string;
   group_id?: string | null; // spec 2026-10-17 (1.3d): the DVR may live inside a folder
+  server_id?: string;       // spec 2026-10-30 (multi-server): etiqueta do hook, additive
 };
 // One row of the wizard channel checklist: `has_stream` comes from the OPTIONS probe on the channel
 // (decision 3).
@@ -98,7 +102,7 @@ export type Settings = {
   retention_days: number; disk_max_percent: number; disk: DiskStatus;
 };
 export type Brand = { name: string };
-export type Group = { id: string; name: string; parent_id?: string | null; created_at?: string };
+export type Group = { id: string; name: string; parent_id?: string | null; created_at?: string; server_id?: string };
 export type Cell = { id: string; col: number; row: number; colspan: number; rowspan: number; content?: { kind: string; camera_id: string } | null };
 export type Layout = { id: string; name: string; cells?: Cell[]; created_ts?: number; updated_ts?: number };
 export type Bucket = { t: number; fraction: number };

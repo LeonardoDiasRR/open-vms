@@ -3,7 +3,7 @@ import { createElement, type ReactNode } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ApiClient } from '@/shared/utils/api';
 import { LanguageProvider, useT } from '@/shared/i18n';
-import { useCameras, cameraMenuItems } from './useCameras';
+import { useCameras, cameraMenuItems, serverMenuItems } from './useCameras';
 import type { Capability } from '@/shared/domain/capabilities';
 
 // ponytail: the hook receives the api as a parameter; the module mock guarantees no test here
@@ -203,5 +203,90 @@ describe('cameraMenuItems capability gate', () => {
     // task 4.2: the activate pair touches ONLY the cameras of the selection -> camera.manage alone
     expect(ids(menu({ kind: 'camera', id: 'c1' }, mixed, false, manageOnly))).toEqual(['activate-all', 'deactivate-all']);
     expect(ids(menu({ kind: 'camera', id: 'c1' }, mixed, false, () => true))).toEqual(['delete', 'create-group', 'activate-all', 'deactivate-all']);
+  });
+});
+
+// plan 2026-10-30 (multi-server, spec 5.5)
+describe('useCameras multi-server', () => {
+  const cam = (id: string) => ({ id, name: id, state: 'online', profile_ids: [] });
+  const srvApi = (over: Partial<Api> = {}): Api => ({
+    cameras: async () => [],
+    devices: async () => [],
+    health: async () => ({ ok: true, version: '1' }),
+    groups: async () => [],
+    rtsp: async () => ({ enabled: false, port: 8554, active: [] }),
+    moveCamera: async () => cam('x'),
+    updateGroup: async () => ({ id: 'g', name: 'g' }),
+    moveDevice: async () => ({ id: 'd', name: 'd' }),
+    ...over,
+  });
+
+  it('merges the slices tagged with server_id and answers rtspByServer per server', async () => {
+    const A = srvApi({ cameras: async () => [cam('a1')], rtsp: async () => ({ enabled: true, port: 9001, active: [] }) });
+    const B = srvApi({ cameras: async () => [cam('b1')], groups: async () => [{ id: 'gb', name: 'Pasta B' }], rtsp: async () => ({ enabled: true, port: 9002, active: [] }) });
+    const { result } = renderHook(() => useCameras([{ id: 'A', api: A }, { id: 'B', api: B }]), { wrapper });
+    await waitFor(() => expect(result.current.cameras).toHaveLength(2));
+    expect(result.current.cameras.map((c) => [c.id, c.server_id])).toEqual([['a1', 'A'], ['b1', 'B']]);
+    expect(result.current.groups).toEqual([{ id: 'gb', name: 'Pasta B', server_id: 'B' }]);
+    expect(result.current.rtspByServer['A']?.port).toBe(9001);
+    expect(result.current.rtspByServer['B']?.port).toBe(9002);
+    expect(result.current.connection.ok).toBe(true);
+    expect(result.current.connections.map((c) => c.ok)).toEqual([true, true]);
+  });
+
+  it('a server rejected from the start keeps the OTHER slice, names itself offline and the aggregate fails', async () => {
+    const dead = srvApi({ cameras: async () => { throw new Error('http 503'); } });
+    const A = srvApi({ cameras: async () => [cam('a1')] });
+    const { result } = renderHook(() => useCameras([{ id: 'A', api: A }, { id: 'B', api: dead }]), { wrapper });
+    await waitFor(() => expect(result.current.connection.ok).toBe(false));
+    expect(result.current.cameras.map((c) => c.id)).toEqual(['a1']);
+    expect(result.current.connections.find((c) => c.serverId === 'B')).toEqual({ serverId: 'B', ok: false, message: 'http 503' });
+    expect(result.current.connections.find((c) => c.serverId === 'A')?.ok).toBe(true);
+  });
+
+  it('after a good tick a failed tick keeps the last slice of the own server (spec 5.5)', async () => {
+    let fail = false;
+    const B = srvApi({ cameras: async () => { if (fail) throw new Error('http 503'); return [cam('b1')]; } });
+    const A = srvApi({ cameras: async () => [cam('a1')] });
+    const { result } = renderHook(() => useCameras([{ id: 'A', api: A }, { id: 'B', api: B }]), { wrapper });
+    await waitFor(() => expect(result.current.cameras).toHaveLength(2));
+    fail = true;
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.cameras.map((c) => c.id)).toEqual(['a1', 'b1']); // a fatia B congelou na última leitura
+    expect(result.current.connections.find((c) => c.serverId === 'B')?.ok).toBe(false);
+  });
+
+  it('move refuses a target of another server and calls NO PATCH', async () => {
+    const moveA = vi.fn(async () => cam('a1'));
+    const A = srvApi({ cameras: async () => [cam('a1')], moveCamera: moveA });
+    const B = srvApi({ groups: async () => [{ id: 'gb', name: 'Pasta B' }] });
+    const { result } = renderHook(() => useCameras([{ id: 'A', api: A }, { id: 'B', api: B }]), { wrapper });
+    await waitFor(() => expect(result.current.cameras).toHaveLength(1));
+    const err = await result.current.move({ cameraIds: ['a1'], groupIds: [], target: 'gb' });
+    expect(err).toBe(labels().t('servers.cross_server_move'));
+    expect(moveA).not.toHaveBeenCalled();
+  });
+
+  it('move inside the same server PATCHes the api of the camera server', async () => {
+    const moveA = vi.fn(async () => cam('a1'));
+    const A = srvApi({ cameras: async () => [cam('a1')], groups: async () => [{ id: 'ga', name: 'Pasta A' }], moveCamera: moveA });
+    const { result } = renderHook(() => useCameras([{ id: 'A', api: A }]), { wrapper });
+    await waitFor(() => expect(result.current.cameras).toHaveLength(1));
+    expect(await result.current.move({ cameraIds: ['a1'], groupIds: [], target: 'ga' })).toBeNull();
+    expect(moveA).toHaveBeenCalledWith('a1', 'ga');
+  });
+});
+
+describe('serverMenuItems', () => {
+  const items = (can?: (c: Capability) => boolean) => serverMenuItems({ kind: 'server', id: 'http://a' }, labels(), can);
+
+  it('rename, disconnect (danger only) and add-camera with the global cap (spec 5.4)', () => {
+    const L = labels();
+    expect(items(() => true).map((i) => i.id)).toEqual(['rename-server', 'disconnect-server', 'add-camera']);
+    expect(items(() => true)[1].danger).toBe(true);
+    expect(items(() => true)[0].danger).toBeUndefined();
+    const noGlobal = items(() => false);
+    expect(noGlobal.map((i) => i.id)).toEqual(['rename-server', 'disconnect-server']);
+    expect(noGlobal.map((i) => i.label)).toEqual([L.t('servers.rename'), L.t('servers.disconnect')]);
   });
 });
