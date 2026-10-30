@@ -6,9 +6,12 @@ import LoginPage from './LoginPage';
 const renderPage = (onLogin: () => void) => render(<LanguageProvider><LoginPage onLogin={onLogin} /></LanguageProvider>);
 
 beforeEach(() => {
-  // E3: o setup global semeia openvms.lang='en'; clear() mataria o idioma — só as chaves da conexao.
+  // E3 do plano anterior: o setup global semeia openvms.lang='en'; clear() mataria o idioma —
+  // so as chaves da conexao, agora os DOIS pares (spec memoria-conexao-independente).
   localStorage.removeItem('openvms.server');
   localStorage.removeItem('openvms.port');
+  localStorage.removeItem('openvms.serverModal');
+  localStorage.removeItem('openvms.portModal');
   h.instances.length = 0;
   h.fail = false;
 });
@@ -43,6 +46,14 @@ describe('LoginPage', () => {
     expect((screen.getByLabelText('Port') as HTMLInputElement).value).toBe('7102');
   });
 
+  it('memoria da modal NAO aparece no login (spec 2026-10-30)', () => {
+    localStorage.setItem('openvms.serverModal', '10.9.9.9');
+    localStorage.setItem('openvms.portModal', '8443');
+    renderPage(() => {});
+    expect((screen.getByLabelText('Server') as HTMLInputElement).value).toBe(window.location.hostname);
+    expect((screen.getByLabelText('Port') as HTMLInputElement).value).toBe(window.location.port);
+  });
+
   it('Server e Port ficam na mesma linha (.server-port-row)', () => {
     const { container } = renderPage(() => {});
     const row = container.querySelector('.server-port-row');
@@ -62,6 +73,8 @@ describe('LoginPage', () => {
     expect(h.instances[0]).toBe(`${window.location.protocol}//10.0.0.5:7102`);
     expect(localStorage.getItem('openvms.server')).toBe('10.0.0.5');
     expect(localStorage.getItem('openvms.port')).toBe('7102');
+    expect(localStorage.getItem('openvms.serverModal')).toBeNull();
+    expect(localStorage.getItem('openvms.portModal')).toBeNull();
   });
 
   it('login que falha NAO salva a memoria', async () => {

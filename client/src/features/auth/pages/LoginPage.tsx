@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useT, type Language } from '@/shared/i18n';
 import { InputSenha } from '@/shared/ui/input-senha';
 import { ApiClient } from '@/shared/utils/api';
-import { buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
+import { LOGIN_MEMORY, buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
 import type { Capability } from '@/shared/domain/capabilities';
 
 const TOKEN_KEY = 'openvms.token';
@@ -25,7 +25,7 @@ function errorMessage(err: unknown, fallback: string) {
 export default function LoginPage({ onLogin }: Props) {
   const { t, lang, setLang } = useT();
   // spec 2026-10-30: Server e Port vem da memoria da ultima conexao (legado: URL inteira decomposta).
-  const [last] = useState(readLastConnection);
+  const [last] = useState(() => readLastConnection(LOGIN_MEMORY));
   const [server, setServer] = useState(last.host);
   const [port, setPort] = useState(last.port);
   const [user, setUser] = useState('');
@@ -41,7 +41,7 @@ export default function LoginPage({ onLogin }: Props) {
       const p = port.trim();
       const api = new ApiClient(buildBase(window.location.protocol, server.trim(), p));
       const session = await api.login(user, password);
-      saveLastConnection(server.trim(), p);
+      saveLastConnection(LOGIN_MEMORY, server.trim(), p);
       sessionStorage.setItem(TOKEN_KEY, session.token);
       // F4 (spec §10): the profile and the flag go up to the App — the client keeps no role at all.
       onLogin({ api, user: session.username, profile: session.profile_id, capabilities: session.capabilities as Capability[],
