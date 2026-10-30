@@ -2,7 +2,7 @@
 const crypto = require('node:crypto');
 const { newCamera, addressOf } = require('../lib/cameras');
 const { syncProfiles, syncDevice } = require('./onvif');
-const { verifyCamera, probeChannel } = require('../lib/camera-gate');
+const { verifyCamera, probeChannel, probeRtspAuth } = require('../lib/camera-gate');
 const { classifySources, profileChannels, physicalIdOf, newDevice } = require('../lib/nvr');
 const { urlForBrand, isPlaceholder, withoutUser, isKnownBrand, brandByName, listBrands, withPort } = require('../lib/rtsp');
 const { cameraRoles } = require('../lib/roles');
@@ -366,6 +366,18 @@ function deviceRoutes(store, deps) {
         if (!p.source) throw new AppError('stream_profile_source_required');
         if (names.has(p.name)) throw new AppError('stream_profile_name_taken');
         names.add(p.name);
+      }
+      // Gate de credencial no momento do add (bug medido 2026-10-30): a varredura sonda a RAIZ do
+      // RTSP — um servidor por caminho (mediamtx) responde lá igual com senha certa ou errada.
+      // Aqui o wizard já trouxe a URL do canal (body.source): o DESCRIBE autenticado decide.
+      // 'unknown' não pune, a mesma regra do gate do scan. Antes de qualquer escrita.
+      const cred = body.credential;
+      const source0 = body.source || (addrs[0] ? `rtsp://${addrs[0].ip}:${Number(addrs[0].port) || 554}/` : null);
+      if (cred && cred.username && cred.password && source0 && /^rtsp:\/\//i.test(source0)) {
+        const u = new URL(source0);
+        const r = await (deps.rtspAuthProbe || probeRtspAuth)(
+          u.hostname, Number(u.port) || 554, cred.username, cred.password, 5000, source0);
+        if (r === 'refused') throw new AppError('invalid_credentials');
       }
       const credential_ref = body.credential ? 'cred:' + crypto.randomUUID() : null;
       if (credential_ref) {
