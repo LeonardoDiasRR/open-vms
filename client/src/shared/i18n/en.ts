@@ -23,6 +23,7 @@ export const en = {
   'auth.login_description': 'Enter your credentials to access OpenVMS.',
   'auth.secure_access': 'Secure access · OpenVMS',
   'auth.server': 'Server',
+  'auth.port': 'Port',
   'auth.username': 'Username',
   'auth.password': 'Password',
   'auth.show_password': 'Show password',

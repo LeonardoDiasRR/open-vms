@@ -24,6 +24,7 @@ export const ptBR: Record<MessageKey, string> = {
   'auth.login_description': 'Informe suas credenciais para acessar o OpenVMS.',
   'auth.secure_access': 'Acesso seguro · OpenVMS',
   'auth.server': 'Servidor',
+  'auth.port': 'Porta',
   'auth.username': 'Usuário',
   'auth.password': 'Senha',
   'auth.show_password': 'Mostrar senha',
