@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useT } from '@/shared/i18n';
-import { buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
+import { MODAL_MEMORY, buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
 
 // Modal "Connect server" (spec 2026-10-30, 5.2): campos IP/porta/usuário/senha, base
 // {scheme}://{ip}:{porta} com o scheme da página. O LOGIN é do chamador (App -> useServers.addServer),
@@ -14,8 +14,8 @@ type Props = {
 
 export default function AddServerModal({ existingBases, onSubmit, onClose }: Props) {
   const { t } = useT();
-  // spec 2026-10-30: prefill pela ultima conexao bem-sucedida (login ou modal); sem memoria, a pagina.
-  const [last] = useState(readLastConnection);
+  // spec 2026-10-30 (memoria-conexao-independente): prefill pela ultima conexao da MODAL; sem memoria, a pagina.
+  const [last] = useState(() => readLastConnection(MODAL_MEMORY));
   const [ip, setIp] = useState(last.host);
   const [port, setPort] = useState(last.port);
   const [user, setUser] = useState('');
@@ -37,7 +37,7 @@ export default function AddServerModal({ existingBases, onSubmit, onClose }: Pro
     const msg = await onSubmit(base, user, password);
     setBusy(false);
     if (msg) setError(msg); // 'http <status> · <mensagem>' chega pronto do chamador (api.ts httpError)
-    else { saveLastConnection(ip.trim(), p); onClose(); } // sucesso: so aqui a memoria e gravada
+    else { saveLastConnection(MODAL_MEMORY, ip.trim(), p); onClose(); } // sucesso: so aqui, so no par da modal
   }
 
   return (
