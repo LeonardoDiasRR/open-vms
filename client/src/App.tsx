@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
-import { ApiClient } from '@/shared/utils/api';
+import { ApiClient, type PtzVector } from '@/shared/utils/api';
 import LoginPage from '@/features/auth/pages/LoginPage';
 import ForcedPasswordChange from '@/features/auth/components/TrocaSenhaObrigatoria';
 import OnboardingWizard from '@/features/auth/components/WizardOnboarding';
@@ -115,7 +115,7 @@ export default function App() {
     // rejection LAZY (deviation): created at memo time it would sit unhandled on every mount
     const noServer = () => Promise.reject(new Error('no server'));
     return {
-      ptzMove: (id: string, v: never) => { const a = of(id); return a ? a.ptzMove(id, v) : noServer(); },
+      ptzMove: (id: string, v: PtzVector) => { const a = of(id); return a ? a.ptzMove(id, v) : noServer(); },
       ptzStop: (id: string) => { const a = of(id); return a ? a.ptzStop(id) : noServer(); },
       ptzCapability: (id: string, refresh?: boolean) => { const a = of(id); return a ? a.ptzCapability(id, refresh) : noServer(); },
       ptzPositions: (id: string) => { const a = of(id); return a ? a.ptzPositions(id) : noServer(); },
@@ -123,7 +123,7 @@ export default function App() {
       ptzGoToPosition: (id: string, position: number) => { const a = of(id); return a ? a.ptzGoToPosition(id, position) : noServer(); },
       ptzRenamePosition: (id: string, position: number, name: string) => { const a = of(id); return a ? a.ptzRenamePosition(id, position, name) : noServer(); },
       ptzDeletePosition: (id: string, position: number) => { const a = of(id); return a ? a.ptzDeletePosition(id, position) : noServer(); },
-      ptzZoomArea: (id: string, box: never) => { const a = of(id); return a ? a.ptzZoomArea(id, box) : noServer(); },
+      ptzZoomArea: (id: string, box: { left: number; top: number; right: number; bottom: number; aspect: number }) => { const a = of(id); return a ? a.ptzZoomArea(id, box) : noServer(); },
       ptzUndoZoom: (id: string) => { const a = of(id); return a ? a.ptzUndoZoom(id) : noServer(); },
     };
   }, []);
