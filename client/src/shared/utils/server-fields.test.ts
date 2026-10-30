@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  SERVER_HOST_KEY, SERVER_PORT_KEY, buildBase, readLastBase, readLastConnection, saveLastConnection, splitServerValue,
+  LOGIN_MEMORY, MODAL_MEMORY, SERVER_HOST_KEY, SERVER_PORT_KEY, buildBase, readLastBase,
+  readLastConnection, saveLastConnection, splitServerValue,
 } from './server-fields';
 
 describe('splitServerValue (spec 2026-10-30, 3.2)', () => {
@@ -36,7 +37,7 @@ describe('memoria da ultima conexao (spec 2026-10-30, 3.1)', () => {
   });
   it('guarda e recupera host e porta', () => {
     localStorage.clear();
-    saveLastConnection('10.0.0.9', '8443');
+    saveLastConnection(LOGIN_MEMORY, '10.0.0.9', '8443');
     expect(readLastConnection()).toEqual({ host: '10.0.0.9', port: '8443' });
     expect(localStorage.getItem(SERVER_HOST_KEY)).toBe('10.0.0.9');
     expect(localStorage.getItem(SERVER_PORT_KEY)).toBe('8443');
@@ -48,12 +49,34 @@ describe('memoria da ultima conexao (spec 2026-10-30, 3.1)', () => {
   });
   it('readLastBase monta a base da memoria; legado decompoe; sem memoria vazio', () => {
     localStorage.clear();
-    saveLastConnection('srv9', '7102');
+    saveLastConnection(LOGIN_MEMORY, 'srv9', '7102');
     expect(readLastBase()).toBe(`${window.location.protocol}//srv9:7102`);
     localStorage.clear();
     localStorage.setItem(SERVER_HOST_KEY, 'http://10.95.7.25:7102');
     expect(readLastBase()).toBe('http://10.95.7.25:7102');
     localStorage.clear();
+    expect(readLastBase()).toBe('');
+  });
+});
+
+describe('escopos independentes (spec 2026-10-30 memoria-conexao-independente, 3.1)', () => {
+  it('guarda e recupera nas chaves da modal sem tocar no login (e vice-versa)', () => {
+    localStorage.clear();
+    saveLastConnection(MODAL_MEMORY, '10.0.0.8', '8443');
+    expect(readLastConnection(MODAL_MEMORY)).toEqual({ host: '10.0.0.8', port: '8443' });
+    expect(localStorage.getItem('openvms.serverModal')).toBe('10.0.0.8');
+    expect(localStorage.getItem('openvms.portModal')).toBe('8443');
+    expect(readLastConnection(LOGIN_MEMORY).host).toBe(window.location.hostname);
+    expect(localStorage.getItem(SERVER_HOST_KEY)).toBeNull();
+    saveLastConnection(LOGIN_MEMORY, '10.0.0.7', '7102');
+    expect(readLastConnection(MODAL_MEMORY)).toEqual({ host: '10.0.0.8', port: '8443' });
+    expect(localStorage.getItem('openvms.serverModal')).toBe('10.0.0.8');
+  });
+  it('readLastConnection sem argumento le o escopo do login', () => {
+    localStorage.clear();
+    saveLastConnection(MODAL_MEMORY, 'so.a.modal', '1234');
+    expect(readLastConnection()).toEqual(readLastConnection(LOGIN_MEMORY));
+    expect(readLastConnection().host).toBe(window.location.hostname);
     expect(readLastBase()).toBe('');
   });
 });
