@@ -1060,6 +1060,14 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .cam-dots.mini-cta[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
 /* a bolinha de 7px (badge) precisa de flex para ser centralizada dentro do botao (span inline nao e flex-item aqui) */
 .tree-secao .filtro-gravacao { display: flex; align-items: center; justify-content: center; }
+
+/* ── múltiplos servidores (plan 2026-10-30): nó servidor da árvore ────────────────────────
+   A linha REUSA .tree-row (layout), .tree-cabeca/.tree-alca/.tree-icone/.tree-nome, .cam-dots
+   e o ponto de status é o .badge das câmeras (.online/.error — nenhuma cor nova). Só falta o
+   peso de container (a mesma regra do grupo/DVR em .tree li.tree-grupo) e o respiro do ponto. */
+.tree li.tree-servidor { font-weight: 500; flex-wrap: wrap; padding: 0; }  /* .tree-cabeca e .tree-filhos têm flex-basis:100% — sem wrap eles ficam lado a lado */
+.tree-servidor .badge { margin-left: 6px; flex: none; }
+.tree-servidor .tree-nome { font-weight: 600; }
 /* Campo de filtro (spec 2026-10-17, secao 4.1). O visual base JA VEM da regra `input` do arquivo
    (linha ~90: fundo --input, borda --border, raio 3px, texto --text, `font: inherit`, `width: 100%`):
    aqui e so a GEOMETRIA dentro da secao e o marcador. Repetir borda/fundo aqui seria a mesma regra
