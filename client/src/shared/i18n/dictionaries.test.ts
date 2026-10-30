@@ -32,4 +32,16 @@ describe('dictionaries', () => {
       expect((en as Record<string, string>)[k], `en ${k}`).toBeTruthy();
     }
   });
+
+  // plan 2026-10-30 (multi-server): as chaves do painel Servers.
+  it('has the multi-server keys', () => {
+    const KEYS = ['servers.title', 'servers.add', 'servers.rename', 'servers.disconnect', 'servers.add_camera',
+      'servers.connect_title', 'servers.ip', 'servers.port', 'servers.disconnect_confirm',
+      'servers.disconnect_primary_confirm', 'servers.already_connected', 'servers.cross_server_move',
+      'servers.count', 'servers.connect_failed'] as const;
+    for (const k of KEYS) {
+      expect((ptBR as Record<string, string>)[k], `pt-BR ${k}`).toBeTruthy();
+      expect((en as Record<string, string>)[k], `en ${k}`).toBeTruthy();
+    }
+  });
 });
