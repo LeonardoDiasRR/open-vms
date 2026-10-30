@@ -99,9 +99,9 @@ function rtspAuthHeader(challenge, method, uri, user, pass) {
 // false negative, hence the liveness OPTIONS below — it never authenticates, so it burns no attempt.
 const AUTH_SILENCE_MS = 800;
 
-function probeRtspAuth(ip, port, user, pass, timeoutMs = DEFAULT_TIMEOUT) {
+function probeRtspAuth(ip, port, user, pass, timeoutMs = DEFAULT_TIMEOUT, url = null) {
   return new Promise((resolve) => {
-    const uri = `rtsp://${ip}:${port}/`;
+    const uri = url || `rtsp://${ip}:${port}/`;
     const sock = net.connect({ host: ip, port });
     let buf = '';
     let done = false;
@@ -112,7 +112,10 @@ function probeRtspAuth(ip, port, user, pass, timeoutMs = DEFAULT_TIMEOUT) {
     const arm = (ms, fn) => { if (timer) clearTimeout(timer); timer = setTimeout(fn, ms); };
     const finish = (r) => { if (done) return; done = true; if (timer) clearTimeout(timer); sock.destroy(); resolve(r); };
     sock.setTimeout(0);
-    sock.once('error', () => finish('unknown'));
+    // RST depois do DESCRIBE autenticado é recusa ativa (mediu 2026-10-30: o mediamtx responde o 401 do
+    // Basic errado e dá RST — o 'error' chega antes do 'data' e perderia a recusa). 'close' limpo e
+    // qualquer erro ANTES da autenticação seguem 'unknown': o gate não pune o que não decidiu.
+    sock.once('error', (e) => finish(sentAuth && e.code === 'ECONNRESET' ? 'refused' : 'unknown'));
     sock.once('close', () => finish('unknown'));
     const describe = (auth) =>
       `DESCRIBE ${uri} RTSP/1.0\r\nCSeq: 2\r\n${auth ? 'Authorization: ' + auth.value + '\r\n' : ''}Accept: application/sdp\r\n\r\n`;
