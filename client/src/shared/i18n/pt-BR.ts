@@ -191,6 +191,22 @@ export const ptBR: Record<MessageKey, string> = {
   'cameras.manufacturer.load_failed': 'falha ao listar marcas',
   'cameras.manufacturer.save_failed': 'falha ao salvar',
 
+  // múltiplos servidores (plan 2026-10-30)
+  'servers.title': 'Servidores',
+  'servers.add': 'Conectar servidor',
+  'servers.rename': 'Renomear servidor',
+  'servers.disconnect': 'Desconectar servidor',
+  'servers.add_camera': 'Adicionar câmera',
+  'servers.connect_title': 'Conectar servidor OpenVMS',
+  'servers.ip': 'IP',
+  'servers.port': 'Porta',
+  'servers.disconnect_confirm': 'Desconectar o servidor "{name}"? As câmeras dele saem da árvore e do palco.',
+  'servers.disconnect_primary_confirm': 'Este é o servidor do login. Desconectar encerra a sessão inteira e volta para a tela de login.',
+  'servers.already_connected': 'já conectado',
+  'servers.cross_server_move': 'O destino pertence a outro servidor',
+  'servers.count': '{n} servidores',
+  'servers.connect_failed': 'Não foi possível conectar ao servidor',
+
   // live view
   'live.no_camera': 'sem câmera',
   'live.remove_from_layout': 'Remover do layout',

@@ -190,6 +190,22 @@ export const en = {
   'cameras.manufacturer.load_failed': 'Could not list the brands',
   'cameras.manufacturer.save_failed': 'Could not save',
 
+  // multiple servers (plan 2026-10-30)
+  'servers.title': 'Servers',
+  'servers.add': 'Connect server',
+  'servers.rename': 'Rename server',
+  'servers.disconnect': 'Disconnect server',
+  'servers.add_camera': 'Add camera',
+  'servers.connect_title': 'Connect OpenVMS server',
+  'servers.ip': 'IP',
+  'servers.port': 'Port',
+  'servers.disconnect_confirm': 'Disconnect server "{name}"? Its cameras leave the tree and the stage.',
+  'servers.disconnect_primary_confirm': 'This is the login server. Disconnecting ends the whole session and returns to the login screen.',
+  'servers.already_connected': 'already connected',
+  'servers.cross_server_move': 'The target belongs to another server',
+  'servers.count': '{n} servers',
+  'servers.connect_failed': 'Could not connect to the server',
+
   // live view
   'live.no_camera': 'No camera',
   'live.remove_from_layout': 'Remove from layout',
