@@ -47,6 +47,9 @@ type Cam = Camera & { profile_ids?: string[] };
 
 export type Props = {
   api: ApiClient;
+  // Multi-server (spec 2026-10-30, 5.6): o ApiClient do servidor da câmera — timeline, player e o
+  // export do modal resolvem por ele. Ausente = tudo no `api` (chamador de um servidor só).
+  apiFor?: (serverId: string) => ApiClient;
   // The App hands the catalog as a prop (same invoice as Live); the page test attaches
   // cameras/groups to the api object itself (pinned format of the plan) — both paths hold.
   cameras?: Cam[];
@@ -86,7 +89,7 @@ const readSheetOpen = (): boolean => { try { return localStorage.getItem(SHEET_K
 let archiveSnapshot: { from: number; playhead: number | null; speed: number } | null = null;
 export function clearArchiveSnapshot(): void { archiveSnapshot = null; clearStageTabsSnapshot(); }
 
-export default function ArchiveView({ api, cameras: camerasProp, groups: groupsProp, layouts = [], openRequest = null, onRequestConsumed = () => {}, onLayoutsChanged, onExportsChanged, onConfig = () => {}, onRename = () => {}, canExport = true, canManageCameras }: Props) {
+export default function ArchiveView({ api, apiFor, cameras: camerasProp, groups: groupsProp, layouts = [], openRequest = null, onRequestConsumed = () => {}, onLayoutsChanged, onExportsChanged, onConfig = () => {}, onRename = () => {}, canExport = true, canManageCameras }: Props) {
   const { t } = useT();
   const cameras = camerasProp ?? (api as unknown as { cameras?: Cam[] }).cameras ?? [];
   const groups = groupsProp ?? (api as unknown as { groups?: Group[] }).groups;
@@ -254,7 +257,7 @@ export default function ArchiveView({ api, cameras: camerasProp, groups: groupsP
         const c = cameras.find((x) => x.id === id);
         const p = c && pid(c);
         if (!p) return { id, segs: [] as Segment[] };
-        const d = await api.timeline({ stream_profile_id: p, from: midnight, to: end, bucket_seconds: 60 });
+        const d = await (apiFor && c?.server_id ? apiFor(c.server_id) : api).timeline({ stream_profile_id: p, from: midnight, to: end, bucket_seconds: 60 });
         return { id, segs: runs(d.buckets, d.bucket_seconds, end) };
       }));
       const map: Record<string, Segment[]> = Object.fromEntries(rs.map((r) => [r.id, r.segs]));
@@ -294,7 +297,7 @@ export default function ArchiveView({ api, cameras: camerasProp, groups: groupsP
         const c = cameras.find((x) => x.id === id);
         const p = c && pid(c);
         if (!p) return { id, segs: [] as Segment[] };
-        const d = await api.timeline({ stream_profile_id: p, from, to, bucket_seconds: 60 });
+        const d = await (apiFor && c?.server_id ? apiFor(c.server_id) : api).timeline({ stream_profile_id: p, from, to, bucket_seconds: 60 });
         return { id, segs: runs(d.buckets, d.bucket_seconds, to) };
       }));
       const prev = coverageRef.current;
@@ -356,6 +359,19 @@ export default function ArchiveView({ api, cameras: camerasProp, groups: groupsP
   // the banner above already warns.
   const playerApi = useMemo(() => ({ base: api.base, token: api.token ?? '' }), [api.base, api.token]);
 
+  // Player api POR servidor (5.6): o cache guarda a identidade estável de cada par (servidor, token)
+  // — a mesma razão do memo acima. Sem apiFor é exatamente `playerApi` (compat pinada).
+  const playerApiCache = useRef(new Map<string, { base: string; token: string }>());
+  const playerApiFor = useCallback((serverId?: string | null) => {
+    if (!apiFor) return playerApi;
+    const a = serverId ? apiFor(serverId) : api;
+    const key = `${serverId ?? '__primary__'}|${a.token ?? ''}`;
+    let p = playerApiCache.current.get(key);
+    if (!p) { p = { base: a.base, token: a.token ?? '' }; playerApiCache.current.set(key, p); }
+    return p;
+  }, [api, apiFor, playerApi]);
+  const focusedServer = cameras.find((c) => c.id === selectedCamera)?.server_id;
+
   // ─── snapshot (D5): every render updates it (unmount does NOT rewrite: clearArchiveSnapshot of
   // ─── the logout has to beat the last render, and the last render already wrote the last photo) ─
   useEffect(() => {
@@ -390,7 +406,7 @@ export default function ArchiveView({ api, cameras: camerasProp, groups: groupsP
               atEdge={clock.atEdge}
               autoPlay={clock.playing}
               speed={clock.speed}
-              api={playerApi}
+              api={playerApiFor(cam?.server_id)}
               handleRef={handleFor(cell.id)}
               fullscreen={fullscreen === cell.id}
               onFullscreen={() => onFullscreen(cell.id)}
@@ -413,7 +429,8 @@ export default function ArchiveView({ api, cameras: camerasProp, groups: groupsP
         selected={selectedCamera}
         onExport={canExport ? () => setExportOpen(true) : undefined}
       />
-      <ExportDialog open={exportOpen} onOpenChange={setExportOpen} api={api}
+      <ExportDialog open={exportOpen} onOpenChange={setExportOpen}
+        api={apiFor && focusedServer ? apiFor(focusedServer) : api}
         cameras={exportCameras} defaultProfile={selectedProfile} day={day} onCreated={onExportsChanged} />
       {menu && <CameraMenu x={menu.x} y={menu.y} items={menuItems} onPick={handleMenu} onClose={closeMenu} />}
       <PromptDialog request={dialog.request} onClosed={() => dialog.setRequest(null)} />

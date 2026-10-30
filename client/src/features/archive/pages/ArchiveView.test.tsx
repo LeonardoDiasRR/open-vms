@@ -669,6 +669,25 @@ describe('pointer on camera drop (spec 2026-10-27)', () => {
     await settle();
     expect(relogio(container)).toBe(frozen);                 // pending consumed empty: no jump
   });
+
+  // plan 2026-10-30 (spec 5.6): timeline, player e export pela api do servidor da câmera
+  it('resolves timeline and player by the camera server (apiFor)', async () => {
+    const camS = { id: 'cS', name: 'Srv', state: 'online', profile_ids: ['pS'], recording_profile_id: 'rpS', server_id: 'http://srv2' };
+    const timelineS = vi.fn(async () => ({ buckets: [], bucket_seconds: 60, gravando: false }));
+    const apiS = { base: 'http://srv2', token: 'tS', timeline: timelineS };
+    renderView(<ArchiveView api={api as never} cameras={[camS] as never}
+      apiFor={((sid: string) => (sid === 'http://srv2' ? apiS : api)) as never}
+      openRequest={{ cameras: ['cS'] }} onRequestConsumed={() => {}} />);
+    await waitFor(() => expect(timelineS).toHaveBeenCalled());      // coverage saiu pelo servidor da câmera
+    await waitFor(() => expect(spy.props.length).toBeGreaterThan(0));
+    expect(spy.props.at(-1)?.api).toEqual({ base: 'http://srv2', token: 'tS' }); // player do servidor da câmera
+  });
+
+  it('without apiFor the player keeps the single playerApi identity (compat)', async () => {
+    renderView(<ArchiveView api={api as never} openRequest={{ cameras: ['c1'] }} onRequestConsumed={() => {}} />);
+    await waitFor(() => expect(spy.props.length).toBeGreaterThan(0));
+    expect(spy.props.at(-1)?.api).toEqual({ base: 'b', token: 't' }); // o {base, token} memoizado do fake
+  });
 });
 
 
