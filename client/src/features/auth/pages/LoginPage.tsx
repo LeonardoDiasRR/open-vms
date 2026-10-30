@@ -2,13 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { useT, type Language } from '@/shared/i18n';
 import { InputSenha } from '@/shared/ui/input-senha';
 import { ApiClient } from '@/shared/utils/api';
+import { buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
 import type { Capability } from '@/shared/domain/capabilities';
 
-const SERVER_KEY = 'openvms.server';
 const TOKEN_KEY = 'openvms.token';
-// ponytail: default = same origin; vite proxies /api to the API, so the UI
-// works from any machine (no visitor 127.0.0.1 and no CORS)
-const DEFAULT_SERVER = window.location.origin;
 
 // spec 2026-10-19 (onboarding D1): the TYPED PASSWORD and first_run go up to the App with the session.
 // The password lives only in App memory (§8.3); first_run is the server truth (login §5.1).
@@ -27,7 +24,10 @@ function errorMessage(err: unknown, fallback: string) {
 
 export default function LoginPage({ onLogin }: Props) {
   const { t, lang, setLang } = useT();
-  const [server, setServer] = useState(localStorage.getItem(SERVER_KEY) || DEFAULT_SERVER);
+  // spec 2026-10-30: Server e Port vem da memoria da ultima conexao (legado: URL inteira decomposta).
+  const [last] = useState(readLastConnection);
+  const [server, setServer] = useState(last.host);
+  const [port, setPort] = useState(last.port);
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -38,9 +38,10 @@ export default function LoginPage({ onLogin }: Props) {
     setBusy(true);
     setError(null);
     try {
-      const api = new ApiClient(server);
+      const p = port.trim();
+      const api = new ApiClient(buildBase(window.location.protocol, server.trim(), p));
       const session = await api.login(user, password);
-      localStorage.setItem(SERVER_KEY, server);
+      saveLastConnection(server.trim(), p);
       sessionStorage.setItem(TOKEN_KEY, session.token);
       // F4 (spec §10): the profile and the flag go up to the App — the client keeps no role at all.
       onLogin({ api, user: session.username, profile: session.profile_id, capabilities: session.capabilities as Capability[],
@@ -76,10 +77,16 @@ export default function LoginPage({ onLogin }: Props) {
             <h1>{t('auth.login_title')}</h1>
             <p>{t('auth.login_description')}</p>
           </div>
-          <label>
-            {t('auth.server')}
-            <input value={server} onChange={(e) => setServer(e.target.value)} spellCheck="false" />
-          </label>
+          <div className="server-port-row">
+            <label>
+              {t('auth.server')}
+              <input value={server} onChange={(e) => setServer(e.target.value)} spellCheck="false" />
+            </label>
+            <label className="sp-port">
+              {t('auth.port')}
+              <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
+            </label>
+          </div>
           <label>
             {t('auth.username')}
             <input value={user} onChange={(e) => setUser(e.target.value)} autoFocus />
