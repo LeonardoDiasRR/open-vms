@@ -1134,7 +1134,7 @@ describe('servers in the App shell (plan 2026-10-30)', () => {
     renderApp();
     fireEvent.click(await screen.findByTitle('Connect server'));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByLabelText('IP')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText('Server')).toBeInTheDocument();
     expect(within(dialog).getByLabelText('Port')).toBeInTheDocument();
   });
 

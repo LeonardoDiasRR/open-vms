@@ -1,6 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
-import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { LanguageProvider, useT } from '@/shared/i18n';
 import AddServerModal from './AddServerModal';
 
@@ -12,7 +12,7 @@ const mount = (ui: React.ReactElement) => render(ui, { wrapper });
 
 const fill = (ip: string, port: string) => {
   const L = labels();
-  fireEvent.change(screen.getByLabelText(L.t('servers.ip')), { target: { value: ip } });
+  fireEvent.change(screen.getByLabelText(L.t('auth.server')), { target: { value: ip } });
   fireEvent.change(screen.getByLabelText(L.t('servers.port')), { target: { value: port } });
   fireEvent.change(screen.getByLabelText(L.t('auth.username')), { target: { value: 'admin' } });
   fireEvent.change(screen.getByLabelText(L.t('auth.password')), { target: { value: 'senha' } });
@@ -21,6 +21,8 @@ const fill = (ip: string, port: string) => {
 const submit = () => fireEvent.click(screen.getByRole('button', { name: labels().t('servers.add') }));
 
 describe('AddServerModal (plan 2026-10-30)', () => {
+  // E3: o setup global semeia openvms.lang='en'; clear() mataria o idioma — só as chaves da conexao.
+  beforeEach(() => { localStorage.removeItem('openvms.server'); localStorage.removeItem('openvms.port'); });
   it('mounts the base {scheme}://{ip}:{port} from the page and closes on success', async () => {
     const onSubmit = vi.fn(async () => null as string | null);
     const onClose = vi.fn();
@@ -61,5 +63,40 @@ describe('AddServerModal (plan 2026-10-30)', () => {
     submit();
     expect(await screen.findByText('http 401 · Invalid credentials')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('preenche Server e Port com a ultima conexao salva (spec 2026-10-30)', () => {
+    localStorage.setItem('openvms.server', '10.9.9.9');
+    localStorage.setItem('openvms.port', '8443');
+    mount(<AddServerModal existingBases={[]} onSubmit={async () => null} onClose={() => {}} />);
+    expect((screen.getByLabelText(labels().t('auth.server')) as HTMLInputElement).value).toBe('10.9.9.9');
+    expect((screen.getByLabelText(labels().t('servers.port')) as HTMLInputElement).value).toBe('8443');
+  });
+
+  it('Server e Port ficam na mesma linha (.server-port-row)', () => {
+    const { container } = mount(<AddServerModal existingBases={[]} onSubmit={async () => null} onClose={() => {}} />);
+    const row = container.querySelector('.server-port-row');
+    expect(row).not.toBeNull();
+    expect(within(row as HTMLElement).getByLabelText(labels().t('auth.server'))).toBeInTheDocument();
+    expect(within(row as HTMLElement).getByLabelText(labels().t('servers.port'))).toBeInTheDocument();
+  });
+
+  it('conexao bem-sucedida salva a memoria', async () => {
+    localStorage.removeItem('openvms.server');
+    localStorage.removeItem('openvms.port');
+    mount(<AddServerModal existingBases={[]} onSubmit={async () => null} onClose={() => {}} />);
+    fill('10.0.0.9', '7102');
+    submit();
+    await waitFor(() => expect(localStorage.getItem('openvms.server')).toBe('10.0.0.9'));
+    expect(localStorage.getItem('openvms.port')).toBe('7102');
+  });
+
+  it('erro de conexao NAO salva a memoria', async () => {
+    mount(<AddServerModal existingBases={[]} onSubmit={async () => 'http 401 · Invalid credentials'} onClose={() => {}} />);
+    fill('10.0.0.9', '7102');
+    submit();
+    expect(await screen.findByText('http 401 · Invalid credentials')).toBeInTheDocument();
+    expect(localStorage.getItem('openvms.server')).toBeNull();
+    expect(localStorage.getItem('openvms.port')).toBeNull();
   });
 });

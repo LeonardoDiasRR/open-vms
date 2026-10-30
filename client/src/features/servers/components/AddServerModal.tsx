@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useT } from '@/shared/i18n';
+import { buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
 
 // Modal "Connect server" (spec 2026-10-30, 5.2): campos IP/porta/usuário/senha, base
 // {scheme}://{ip}:{porta} com o scheme da página. O LOGIN é do chamador (App -> useServers.addServer),
@@ -13,8 +14,10 @@ type Props = {
 
 export default function AddServerModal({ existingBases, onSubmit, onClose }: Props) {
   const { t } = useT();
-  const [ip, setIp] = useState('');
-  const [port, setPort] = useState(window.location.port); // pré-preenchida com a porta da página
+  // spec 2026-10-30: prefill pela ultima conexao bem-sucedida (login ou modal); sem memoria, a pagina.
+  const [last] = useState(readLastConnection);
+  const [ip, setIp] = useState(last.host);
+  const [port, setPort] = useState(last.port);
   const [user, setUser] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +28,7 @@ export default function AddServerModal({ existingBases, onSubmit, onClose }: Pro
     setBusy(true);
     setError(null);
     const p = port.trim();
-    const base = `${window.location.protocol}//${ip.trim()}${p ? `:${p}` : ''}`;
+    const base = buildBase(window.location.protocol, ip.trim(), p);
     if (existingBases.includes(base)) {
       setError(t('servers.already_connected'));
       setBusy(false);
@@ -34,34 +37,38 @@ export default function AddServerModal({ existingBases, onSubmit, onClose }: Pro
     const msg = await onSubmit(base, user, password);
     setBusy(false);
     if (msg) setError(msg); // 'http <status> · <mensagem>' chega pronto do chamador (api.ts httpError)
-    else onClose();        // sucesso: o chamador salva token/base e o poll começa; o modal fecha
+    else { saveLastConnection(ip.trim(), p); onClose(); } // sucesso: so aqui a memoria e gravada
   }
 
   return (
     <div className="nx-backdrop">
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
-      <form className="nx-dialog nx-dialog-menor" role="dialog" aria-modal="true" aria-labelledby="add-server-title" onSubmit={submit}>
+      <form className="nx-dialog nx-dialog-menor nx-dialog-cartao" role="dialog" aria-modal="true" aria-labelledby="add-server-title" onSubmit={submit}>
         {/* invariante do repo (modal-invariante.test.ts): todo .nx-dialog renderiza .nx-close */}
         <div className="nx-titlebar">
           <span className="nx-title" id="add-server-title">{t('servers.connect_title')}</span>
           <button type="button" className="nx-close" onClick={onClose} title={t('shared.close')}>✕</button>
         </div>
-        <label>{t('servers.ip')}
-          <input value={ip} onChange={(e) => setIp(e.target.value)} required autoFocus />
-        </label>
-        <label>{t('servers.port')}
-          <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
-        </label>
-        <label>{t('auth.username')}
-          <input value={user} onChange={(e) => setUser(e.target.value)} required autoComplete="username" />
-        </label>
-        <label>{t('auth.password')}
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
-        </label>
-        {error && <p className="banner" role="alert">{error}</p>}
-        <div className="nx-actions">
-          <button type="button" className="nx-btn" onClick={onClose}>{t('shared.cancel')}</button>
-          <button type="submit" className="nx-btn" disabled={busy}>{t('servers.add')}</button>
+        <div className="nx-cartao">
+          <div className="server-port-row">
+            <label>{t('auth.server')}
+              <input value={ip} onChange={(e) => setIp(e.target.value)} required autoFocus />
+            </label>
+            <label className="sp-port">{t('servers.port')}
+              <input value={port} onChange={(e) => setPort(e.target.value)} inputMode="numeric" />
+            </label>
+          </div>
+          <label>{t('auth.username')}
+            <input value={user} onChange={(e) => setUser(e.target.value)} required autoComplete="username" />
+          </label>
+          <label>{t('auth.password')}
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+          </label>
+          {error && <p className="banner" role="alert">{error}</p>}
+          <div className="nx-actions">
+            <button type="button" className="nx-btn" onClick={onClose}>{t('shared.cancel')}</button>
+            <button type="submit" className="nx-btn" disabled={busy}>{t('servers.add')}</button>
+          </div>
         </div>
       </form>
     </div>
