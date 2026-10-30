@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { LanguageProvider } from '@/shared/i18n';
 import StageGrid from './StageGrid';
@@ -249,5 +249,43 @@ describe('marked and expanded cell (spec 2026-10-18)', () => {
     fireEvent.contextMenu(container.querySelector('.stream-cell') as HTMLElement);
     const labels = screen.getAllByRole('menuitem').map((b) => b.textContent);
     expect(labels).toEqual(['Camera settings', 'Remove from layout']);
+  });
+});
+
+// plan 2026-10-30 (spec 5.6): a api da célula é a do servidor da câmera. A capability PTZ é lida do
+// api da célula no mount (StreamCell.tsx:106-112) — é a costura que prova qual api entrou.
+describe('api per camera server (apiFor)', () => {
+  const taggedApi = (cap: ReturnType<typeof vi.fn>) => ({
+    liveToken: async () => ({ whep_url: '', token: '', expires_in: 60 }),
+    ptzCapability: cap,
+  });
+
+  it('each cell receives the api of its own camera server', async () => {
+    const capA = vi.fn(async () => ({ supported: false }));
+    const capB = vi.fn(async () => ({ supported: false }));
+    const apiA = taggedApi(capA); const apiB = taggedApi(capB); // IDENTIDADES ESTÁVEIS: apiFor é chamado a cada render
+    const cams = [
+      { id: 'c1', name: 'A', state: 'online', profile_ids: [], server_id: 'http://a' },
+      { id: 'c2', name: 'B', state: 'online', profile_ids: [], server_id: 'http://b' },
+    ];
+    const cells = [
+      { id: 'x1', col: 0, row: 0, colspan: 1, rowspan: 1, content: { kind: 'live' as const, camera_id: 'c1' } },
+      { id: 'x2', col: 1, row: 0, colspan: 1, rowspan: 1, content: { kind: 'live' as const, camera_id: 'c2' } },
+    ];
+    mount(<StageGrid api={api as never} cameras={cams as never} cells={cells} onChange={() => {}}
+      apiFor={(sid: string) => (sid === 'http://a' ? apiA : apiB) as never} />);
+    await waitFor(() => expect(capA).toHaveBeenCalledWith('c1'));
+    expect(capB).toHaveBeenCalledWith('c2');
+    expect(capA).not.toHaveBeenCalledWith('c2');
+    expect(capB).not.toHaveBeenCalledWith('c1');
+  });
+
+  it('without apiFor every cell uses the single api (fallback da compatibilidade)', async () => {
+    const cap = vi.fn(async () => ({ supported: false }));
+    mount(<StageGrid api={taggedApi(cap) as never}
+      cameras={[{ id: 'c1', name: 'A', state: 'online', profile_ids: [] }] as never}
+      cells={[{ id: 'x1', col: 0, row: 0, colspan: 1, rowspan: 1, content: { kind: 'live' as const, camera_id: 'c1' } }]}
+      onChange={() => {}} />);
+    await waitFor(() => expect(cap).toHaveBeenCalledWith('c1'));
   });
 });

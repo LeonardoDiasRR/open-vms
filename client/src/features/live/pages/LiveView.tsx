@@ -22,6 +22,9 @@ type Api = Pick<ApiClient, 'profiles' | 'saveLayout' | 'liveToken'>;
 
 type Props = {
   api: Api;
+  // Multi-server (spec 2026-10-30, 5.6): a api do servidor da câmera. Ausente = toda célula usa
+  // `api` (chamador de um servidor só — compat total).
+  apiFor?: (serverId: string) => Api;
   cameras: Camera[];
   groups?: Group[];
   layouts?: Layout[];
@@ -57,7 +60,7 @@ let liveSnapshot: { selection: Selection } | null = null;
 // Exported for the App logout and for the tests' `beforeEach`.
 export function clearLiveViewSnapshot() { liveSnapshot = null; clearStageTabsSnapshot(); }
 
-export default function LiveView({ api, cameras, groups = [], layouts = [], openRequest, onConsumeRequest, onLayoutsChanged, onConfig = () => {}, onRename = () => {}, onToggleActive = () => {}, ptz, canManageCameras }: Props) {
+export default function LiveView({ api, apiFor, cameras, groups = [], layouts = [], openRequest, onConsumeRequest, onLayoutsChanged, onConfig = () => {}, onRename = () => {}, onToggleActive = () => {}, ptz, canManageCameras }: Props) {
   const dlg = usePromptDialog();
   const { tabs, active, activeKey, setActiveKey, patchTab, openLayout, closeTab, handleRequest,
     error, menu, openMenu, closeMenu, menuItems, handleMenu } =
@@ -101,7 +104,7 @@ export default function LiveView({ api, cameras, groups = [], layouts = [], open
     <div className="mode-view" onDropCapture={onDropLayout}>
       <StageTabs tabs={tabs} activeKey={activeKey} onSwitch={setActiveKey} onClose={closeTab}
         error={error} onOpenMenu={openMenu} />
-      <StageGrid api={api} cameras={cameras} groups={groups} profiles={profilesByCamera} ptz={ptz}
+      <StageGrid api={api} apiFor={apiFor} cameras={cameras} groups={groups} profiles={profilesByCamera} ptz={ptz}
         cells={active.cells}
         onChange={(cs) => patchTab(active.key, { cells: cs, dirty: true })}
         onConfig={onConfig}

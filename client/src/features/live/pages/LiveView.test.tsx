@@ -226,3 +226,25 @@ describe('cell menu toggle-active', () => {
     vi.unstubAllGlobals();
   });
 });
+
+// plan 2026-10-30: LiveView repassa apiFor ao palco (a célula da câmera etiquetada pergunta ao
+// servidor dela). O stub de WebRTC é o da suíte 'closing a tab'.
+describe('apiFor forwarding (plan 2026-10-30)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('RTCPeerConnection', class {
+      addTransceiver() {} ontrack = null; onconnectionstatechange = null; connectionState = 'connecting';
+      async createOffer() { return { type: 'offer', sdp: 'v=0' }; }
+      async setLocalDescription() {} async setRemoteDescription() {} close() {}
+    });
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 201, text: async () => 'v=0' })));
+  });
+  it('the cell of a tagged camera asks the api of its server', async () => {
+    const cam = { id: 'c1', name: 'Cam', state: 'online', profile_ids: [], server_id: 'http://srv2' };
+    const apiFor = vi.fn(() => api as never);
+    const { container } = mount(<LiveView api={api} cameras={[cam] as never} apiFor={apiFor} />);
+    const grid = container.querySelector('.stage-grid') as HTMLElement;
+    grid.getBoundingClientRect = () => ({ top: 0, left: 0, width: 400, height: 300, right: 400, bottom: 300, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent.drop(grid, { clientX: 10, clientY: 10, dataTransfer: { getData: (t: string) => (t === 'application/x-ovms-camera' ? 'c1' : '') } });
+    await waitFor(() => expect(apiFor).toHaveBeenCalledWith('http://srv2'));
+  });
+});

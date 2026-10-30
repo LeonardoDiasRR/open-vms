@@ -18,6 +18,8 @@ type Api = Pick<ApiClient, 'liveToken'>;
 // contains" lives — StreamCell + context menu (remove/settings).
 type Props = {
   api: Api;
+  // Multi-server (spec 5.6): a célula resolve a api pelo server_id da câmera. Ausente = `api`.
+  apiFor?: (serverId: string) => Api;
   cameras: Camera[];
   groups?: Group[];
   cells: StageCell[];
@@ -36,7 +38,7 @@ type Props = {
   canManageCameras?: boolean;
 };
 
-export default function StageGrid({ api, cameras, groups = [], cells, profiles = {}, onChange, onConfig = () => {}, onRename = () => {}, onToggleActive = () => {}, ptz, selected = null, expanded = false, onSelect = () => {}, onClearSelection = () => {}, canManageCameras = true }: Props) {
+export default function StageGrid({ api, apiFor, cameras, groups = [], cells, profiles = {}, onChange, onConfig = () => {}, onRename = () => {}, onToggleActive = () => {}, ptz, selected = null, expanded = false, onSelect = () => {}, onClearSelection = () => {}, canManageCameras = true }: Props) {
   const { t } = useT();
   const byId = new Map(cameras.map((c) => [c.id, c]));
 
@@ -67,7 +69,9 @@ export default function StageGrid({ api, cameras, groups = [], cells, profiles =
       renderCell={(cell, _marked, _expanded) => {
         const cam = cell.content && byId.get(cell.content.camera_id);
         if (!cam) return <div className="slot-empty">{t('live.no_camera')}</div>;
-        return <StreamCell api={api} camera={cam} profiles={profiles[cam.id] || []} ptz={ptz}
+        // 5.6: a câmera do servidor B fala com o B (liveToken/ptzCapability/PTZ). O slot vazio de
+        // servidor desconectado já é o ramo acima (byId sem a câmera).
+        return <StreamCell api={apiFor && cam.server_id ? apiFor(cam.server_id) : api} camera={cam} profiles={profiles[cam.id] || []} ptz={ptz}
           onRemove={() => onChange(remove(cells, cell.id))}
           actions={cellItems(cam)}
           onAction={(id) => actOnCell(cell, cam, id)} />;
