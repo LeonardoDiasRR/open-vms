@@ -46,6 +46,7 @@ services:
       # port published by the `postgres` service on the host loopback.
       OPENVMS_PG_URL: "${OPENVMS_PG_URL:-postgres://postgres:pw@127.0.0.1:55433/openvms}"
       OPENVMS_RTSP_PORT: ${OPENVMS_RTSP_PORT:-8554}
+      OPENVMS_ALLOWED_ORIGINS: ${OPENVMS_ALLOWED_ORIGINS:-}
       # ponytail: paridade com a producao (o /tmp/ovms.env dela tem exatamente isto).
       # Em host mode os padroes do codigo (127.0.0.1:9997 / 8891 / 8554) ja sao os certos.
       OPENVMS_LIVE: "${OPENVMS_LIVE:-1}"
