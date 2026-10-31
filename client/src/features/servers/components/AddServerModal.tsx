@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useT } from '@/shared/i18n';
+import { InputSenha } from '@/shared/ui/input-senha';
 import { MODAL_MEMORY, buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
 
 // Modal "Connect server" (spec 2026-10-30, 5.2): campos IP/porta/usuário/senha, base
@@ -62,7 +63,7 @@ export default function AddServerModal({ existingBases, onSubmit, onClose }: Pro
             <input value={user} onChange={(e) => setUser(e.target.value)} required autoComplete="username" />
           </label>
           <label>{t('auth.password')}
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" />
+            <InputSenha><input value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" /></InputSenha>
           </label>
           {error && <p className="banner" role="alert">{error}</p>}
           <div className="nx-actions">

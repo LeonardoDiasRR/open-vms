@@ -91,6 +91,16 @@ describe('AddServerModal (plan 2026-10-30)', () => {
     expect(within(row as HTMLElement).getByLabelText(labels().t('servers.port'))).toBeInTheDocument();
   });
 
+  it('campo senha tem o olho que alterna o type (spec 2026-10-27: todo campo senha tem olho)', () => {
+    mount(<AddServerModal existingBases={[]} onSubmit={async () => null} onClose={() => {}} />);
+    const input = document.querySelector('label input[autocomplete="current-password"]') as HTMLInputElement;
+    expect(input).toHaveAttribute('type', 'password');
+    const eye = screen.getByRole('button', { name: labels().t('auth.show_password') });
+    fireEvent.click(eye);
+    expect(input).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: labels().t('auth.hide_password') })).toBeInTheDocument();
+  });
+
   it('conexao bem-sucedida salva so as chaves da modal', async () => {
     mount(<AddServerModal existingBases={[]} onSubmit={async () => null} onClose={() => {}} />);
     fill('10.0.0.9', '7102');
