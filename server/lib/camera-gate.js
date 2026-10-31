@@ -221,9 +221,10 @@ async function verifyCamera({ host, credential, onvif, rtspProbe = probeRtsp, rt
       // authenticated DESCRIBE decides (spec 2026-10-23, decisions D1/D2). Without one the probe does not
       // run — a scan without credential burns no attempt and ineligible nothing.
       if (hasCredential) {
-        // 2026-10-30: com URL de canal digitada, autentica o DESCRIBE no path — e o RST pos-auth do
-        // mediamtx ja e 'refused' dentro do probeRtspAuth. Sem source, comportamento de sempre.
-        const r = await rtspAuthProbe(host.ip, p, user, pass, timeoutMs, channelUrlFor(host, p));
+        // 2026-10-30 (E7 medido no aceite): o 401+RST pos-auth do mediamtx chega em 1,5-3s — o gate do
+        // scan (1500ms) veria 'unknown'. Piso de 5s SO com URL de canal; sem URL, timeout de sempre.
+        const curl = channelUrlFor(host, p);
+        const r = await rtspAuthProbe(host.ip, p, user, pass, curl ? Math.max(timeoutMs, 5000) : timeoutMs, curl);
         if (r === 'refused') return { status: 'invalid_credential', xaddr: null, manufacturer: null, model: null };
       }
       return { status: 'rtsp', xaddr: null, manufacturer: null, model: null };
