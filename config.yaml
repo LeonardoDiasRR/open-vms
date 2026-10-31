@@ -1,0 +1,6 @@
+recordings:
+  retention_days: 3
+  disk_max_percent: 80
+  archive_dir: /mnt/POOL_S3/openvms
+events:
+  retention_days: 30

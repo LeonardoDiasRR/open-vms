@@ -1,0 +1,34 @@
+# Config do Hub (spec 2026-10-16). A porta RTSP vem de MTX_RTSPADDRESS (env), nao daqui.
+# bug medido 2026-10-19: o padrao puxa as cameras em UDP; perda na WAN (10.195.x) entra na
+# GRAVACAO como H.264 corrompido. PENDENTE: na 1.21.2 nem `sourceProtocol`, nem
+# `sourceProtocols`, nem `rtspTransport` existem na config GLOBAL (hub derrubado por
+# "unknown field" em 19/10) — aplicar por caminho via Control API quando a chave certa for achada.
+logLevel: info
+rtsp: yes
+rtspAddress: :8554
+# HLS desligado (spec 2026-10-16): o transporte do videowall e WebRTC; as chaves do muxer saem
+# junto para nao sobrar listener nem sessao de HLS na retaguarda.
+hls: no
+# WebRTC (spec 2026-10-16): e o transporte do videowall. O navegador fala WHEP direto com este
+# listener; a midia sai em UDP pela 8189. `webrtcICEServers2` vazio = candidatos host, que
+# bastam na LAN do videowall. 8888/8889 sao de outros servicos deste host.
+webrtc: yes
+webrtcAddress: :8890
+webrtcLocalUDPAddress: :8189
+webrtcICEServers2: []
+rtmp: no
+# o padrao do srt tambem e a 8890: fica desligado para o WebRTC poder bindar
+srt: no
+# medido: no v1.21 o MoQ sobe sozinho em 8892/8893 e gera certificado proprio — desligado
+moq: no
+# Control API na LOOPBACK: e por ela que a API publica os caminhos das cameras (POST .../replace)
+api: yes
+apiAddress: 127.0.0.1:9997
+authMethod: http
+authHTTPAddress: http://127.0.0.1:7101/api/v1/rtsp/auth
+# a Control API nao passa pelo callback: o listener ja e loopback. O formato da entrada e o mesmo
+# de permissao de usuario ({action, path}) — nao existe campo `ip` aqui.
+authHTTPExclude:
+  - action: api
+paths:
+  all_others:
