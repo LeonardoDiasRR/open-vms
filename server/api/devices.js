@@ -124,6 +124,12 @@ function deviceRoutes(store, deps) {
         ? await deps.wsddDiscover({})
         // ponytail: the client port wins; with no port asked the KEY is absent, so main injects the default list
         : await deps.scanRange({ ips: scope?.ips ?? [], ...(scope?.ports ? { ports: scope.ports } : {}) });
+      if (scope && scope.source) {
+        try {
+          const su = new URL(scope.source);
+          for (const h of hosts) if (h.ip === su.hostname) h.source = scope.source;
+        } catch { /* fonte malformada j foi barrada no handler; dupla protecao: segue na raiz */ }
+      }
       const { seen, failures } = await verifyHosts(hosts, credential);
       // wsdd: the ProbeMatch already proved the protocol (the device answered an ONVIF Probe), so a host
       // that answered the probe is a camera even with the ONVIF HTTP blocked along the way
@@ -286,6 +292,8 @@ function deviceRoutes(store, deps) {
       const id = crypto.randomUUID();
       const started_ts = iso();
       const sc = scope || null;
+      // 2026-10-30: source so entra se for URL rtsp simples; lixo vira "sem source" (raiz, como hoje)
+      if (sc && typeof sc.source === 'string' && !/^rtsp:\/\/[^\s]{1,500}$/i.test(sc.source)) delete sc.source;
       await ops.scans.put({ id, kind, state: 'running', scope: sc, started_ts });
       runScan(id, kind, sc, credential); // fire-and-forget: answers without waiting for the scan to end
       return { scan_id: id, state: 'running', scope: sc, started_ts };
