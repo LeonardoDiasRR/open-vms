@@ -108,7 +108,10 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
       // ponytail: the scanner only accepts an IP; a hostname or a link with a name falls into the
       // server 400. The scan carries the typed credential: it is with it that the server asks the
       // model over ONVIF
-      const body: ScanBody = { kind: 'scan', scope: { ips: [target.host], ports: [target.port] } };
+      // 2026-10-30: a URL digitada vai inteira no scan (path inclusive) — so assim o gate prova a
+      // credencial num servidor por caminho; IP puro no campo continua sondando a raiz como sempre.
+      const body: ScanBody = { kind: 'scan', scope: { ips: [target.host], ports: [target.port],
+        ...(target.scheme === 'rtsp' ? { source: target.source } : {}) } };
       if (credentials.login && credentials.password) body.credential = { username: credentials.login, password: credentials.password };
       const s = await api.startScan(body);
       setScanId(s.scan_id); setResults([]);

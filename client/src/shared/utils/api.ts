@@ -146,7 +146,7 @@ export type PtzVector = { pan: number; tilt: number; zoom: number };
 // OpenVMS saved position (spec 2026-10-17): the list is local, so the identity is the server `id`
 // and the name is free (the `Position N` rule belongs to the server, amendment E1).
 export type PtzPosition = { id: number; name: string };
-export type ScanScope = { ips: string[]; ports?: number[] };
+export type ScanScope = { ips: string[]; ports?: number[]; source?: string };
 export type ScanStart = { scan_id: string; state: string; scope?: ScanScope | null; started_ts: string };
 export type Scan = { id: string; kind?: string; state: string; scope?: ScanScope | null; started_ts: string; found?: number; finished_ts?: string; error?: string };
 export type Discovery = {

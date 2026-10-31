@@ -281,3 +281,62 @@ describe('AddDeviceWizard: field focus order (spec 2026-10-27)', () => {
     expect(fieldOrder(container)).toEqual(['First IP', 'Last IP', 'Login', 'Password', 'Port']);
   });
 });
+
+// REPRO 2026-10-30 (verde apos o encadeamento source->gate): servidor por caminho (mediamtx) com senha errada.
+// Medido ao vivo no container dev: verifyCamera acha o canal na raiz (400 -> 'unknown'), NAO ve a
+// recusa e devolve status 'rtsp' — o mesmo status de uma credencial válida. O checkbox deriva só do
+// status (isCameraIneligible bloqueia apenas 'invalid_credential'), então o operador marca, clica
+// Add e só então descobre o 401. Comportamento desejado: checkbox inativo quando a credencial é
+// inválida — esta asserção falha enquanto o scan não souber distinguir.
+describe('AddDeviceWizard: credencial inválida em servidor por caminho', () => {
+  it('o checkbox fica INATIVO quando a busca com a URL do canal responde com credencial recusada', async () => {
+    const apiRepro = {
+      startScan: async () => ({ scan_id: 's1', state: 'running', started_ts: '' }),
+      scanStatus: async () => ({ id: 's1', state: 'done', started_ts: '' }),
+      // status medido ao vivo (docker exec ovms-api verifyCamera, senha errada, mediamtx 8555)
+      discoveryResults: async () => [
+        // status que o servidor passa a devolver apos o encadeamento do source (sondas 1.1/1.2 verdes;
+        // medicao ao vivo com senha certa segue 'rtsp')
+        { id: '10.95.7.30|8555', ip: '10.95.7.30', openPorts: [8555], status: 'invalid_credential', scan_id: 's1', outcome: 'pending' },
+      ],
+      addCamera: async () => {
+        const e = new Error('Invalid credentials') as Error & { status: number; code: string };
+        e.status = 401; e.code = 'invalid_credentials'; throw e;
+      },
+    };
+    renderWizard(<AddDeviceWizard api={apiRepro as never} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Address'), {
+      target: { value: 'rtsp://10.95.7.30:8555/81f5a2dd-09a8-482e-acc6-3d385aa017bf' },
+    });
+    fireEvent.change(screen.getByLabelText('Login'), { target: { value: 'admin' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'SENHA-ERRADA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    const checkbox = await screen.findByLabelText('Select 10.95.7.30', {}, { timeout: 4000 });
+    expect(checkbox).toBeDisabled();
+    // 2026-10-30 pos-fix: sem candidata elegivel o rotulo do botao e 'Add devices' (sem numero)
+    expect(screen.getByRole('button', { name: /^Add / })).toBeDisabled();
+  });
+});
+
+// CONTRATO 2026-10-30: "Known address" com URL completa deve levar o path ao scan (scope.source) —
+// e a unica forma do gate autenticar um servidor por caminho (mediamtx) antes do checkbox.
+describe('AddDeviceWizard: busca com URL de canal envia scope.source', () => {
+  it('o body de startScan traz a URL digitada em scope.source', async () => {
+    const bodies: unknown[] = [];
+    const apiS = {
+      startScan: async (b: unknown) => { bodies.push(b); return { scan_id: 's1', state: 'done', started_ts: '' }; },
+      scanStatus: async () => ({ id: 's1', state: 'done', started_ts: '' }),
+      discoveryResults: async () => [],
+      addCamera: async () => ({ id: 'c1', name: 'C', state: 'provisioning', profile_ids: [] }),
+      deviceChannels: async () => ({ multichannel: false, sources: 1, channels: [] }),
+    };
+    renderWizard(<AddDeviceWizard api={apiS as never} onClose={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Address'), {
+      target: { value: 'rtsp://10.95.7.30:8555/81f5a2dd-09a8-482e-acc6-3d385aa017bf' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await waitFor(() => expect(bodies.length).toBe(1));
+    expect((bodies[0] as { scope: { source?: string } }).scope.source)
+      .toBe('rtsp://10.95.7.30:8555/81f5a2dd-09a8-482e-acc6-3d385aa017bf');
+  });
+});
