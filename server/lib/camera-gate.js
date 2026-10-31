@@ -182,6 +182,17 @@ function probeChannel(url, timeoutMs = DEFAULT_TIMEOUT) {
   });
 }
 
+// URL do canal digitada pelo operador, quando serve o host:porta sondado. Sem ela o gate autêntica
+// a raiz — e um servidor por caminho (mediamtx) responde a raiz igual com senha certa ou errada.
+function channelUrlFor(host, port) {
+  if (!host || !host.source) return null;
+  try {
+    const u = new URL(host.source);
+    const pu = Number(u.port) || 554;
+    return u.hostname === host.ip && pu === Number(port) ? host.source : null;
+  } catch { return null; }
+}
+
 // Classifies the host: 'none' is the answer to "an open port is not a camera".
 async function verifyCamera({ host, credential, onvif, rtspProbe = probeRtsp, rtspAuthProbe = probeRtspAuth, timeoutMs = DEFAULT_TIMEOUT }) {
   const hasCredential = !!(credential && credential.username && credential.password);
@@ -210,7 +221,9 @@ async function verifyCamera({ host, credential, onvif, rtspProbe = probeRtsp, rt
       // authenticated DESCRIBE decides (spec 2026-10-23, decisions D1/D2). Without one the probe does not
       // run — a scan without credential burns no attempt and ineligible nothing.
       if (hasCredential) {
-        const r = await rtspAuthProbe(host.ip, p, user, pass, timeoutMs);
+        // 2026-10-30: com URL de canal digitada, autentica o DESCRIBE no path — e o RST pos-auth do
+        // mediamtx ja e 'refused' dentro do probeRtspAuth. Sem source, comportamento de sempre.
+        const r = await rtspAuthProbe(host.ip, p, user, pass, timeoutMs, channelUrlFor(host, p));
         if (r === 'refused') return { status: 'invalid_credential', xaddr: null, manufacturer: null, model: null };
       }
       return { status: 'rtsp', xaddr: null, manufacturer: null, model: null };
