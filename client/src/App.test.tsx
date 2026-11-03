@@ -101,8 +101,8 @@ vi.mock('@/features/cameras/services/reStreaming', () => ({
     `rtsp://MOCK/${o.host}:${o.port}/${o.cameraId}`),
 }));
 vi.mock('@/features/cameras/pages/CameraSettingsModal', () => ({
-  default: ({ reStreaming }: { reStreaming: string | null }) =>
-    <div role="dialog" data-testid="csm">{reStreaming ?? ''}</div>,
+  default: ({ reStreaming, camera }: { reStreaming: string | null; camera?: { id: string; name: string; ativa?: boolean } }) =>
+    <div role="dialog" data-testid="csm" data-ativa={String(camera?.ativa)}>{reStreaming ?? ''}</div>,
 }));
 
 import App from './App';
@@ -1182,5 +1182,21 @@ describe('servers in the App shell (plan 2026-10-30)', () => {
     fireEvent.click(await screen.findByText('Camera settings'));
     const csm = await screen.findByTestId('csm');
     expect(csm.textContent).toBe('rtsp://MOCK/srv2:9555/c9');
+  });
+
+  // plano 2026-11-03 (modal-prop-ativa): a modal precisa receber `ativa` da lista — sem o campo,
+  // `camera.ativa !== false` abre true para uma câmera inativa e o Salvar reativa em silêncio.
+  it('settings modal receives ativa:false from the camera list (defeito 2026-11-03)', async () => {
+    fakes.cameras = [{ id: 'c1', name: 'Cam 1', state: 'online', profile_ids: [], can_control: true, ativa: false }];
+    const { container } = renderApp();
+    const tree = await waitFor(() => {
+      const el = container.querySelector('ul.tree');
+      if (!el) throw new Error('tree not rendered yet');
+      return el as HTMLElement;
+    });
+    fireEvent.contextMenu(await within(tree).findByText('Cam 1'));
+    fireEvent.click(await screen.findByText('Camera settings'));
+    const csm = await screen.findByTestId('csm');
+    expect(csm.getAttribute('data-ativa')).toBe('false');
   });
 });
