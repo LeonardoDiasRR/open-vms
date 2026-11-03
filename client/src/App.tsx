@@ -68,7 +68,9 @@ export default function App() {
   // The drag writes the width DIRECTLY into this element's style (never setState per pointermove:
   // one re-render per event would re-render the <video> — lesson from wave 4A.2).
   const shellRef = useRef<HTMLDivElement>(null);
-  const [config, setConfig] = useState<{ id: string; name: string } | null>(null); // {id, name} of the settings modal
+  // plano 2026-11-03 (modal-prop-ativa): `ativa` integra o objeto — a modal lê `camera.ativa !== false`
+  // e sem o campo toda câmera abriria com a chave "Ativa" ligada, inclusive as desativadas.
+  const [config, setConfig] = useState<{ id: string; name: string; ativa?: boolean } | null>(null);
   // spec §12-F4/A1 (phase 4): the administration modal only opens for who holds users/profiles/retention
   // management (can() from login/me). State here, not in the modal, because the button lives in the topbar.
   const [admin, setAdmin] = useState(false);
@@ -309,7 +311,7 @@ export default function App() {
           : cameras.find((c) => c.id === target.id)?.ativa === false;
         for (const cid of cams) await api.setCameraOptions(cid, { ativa });
       } else if (id === 'settings') {
-        setConfig({ id: target.id, name: target.name });
+        setConfig({ id: target.id, name: target.name, ativa: cameras.find((c) => c.id === target.id)?.ativa });
         return;
       }
       await refresh();
@@ -566,14 +568,14 @@ export default function App() {
           <LiveView api={session.api} apiFor={apiFor} cameras={cameras} groups={groups} ptz={ptz}
             layouts={layouts} openRequest={openRequest} onConsumeRequest={consumeRequest}
             onLayoutsChanged={refresh}
-            onConfig={(id: string, name: string) => setConfig({ id, name })}
+            onConfig={(id: string, name: string) => setConfig({ id, name, ativa: cameras.find((c) => c.id === id)?.ativa })}
             onRename={renameFromStage} onToggleActive={toggleActiveFromStage} canManageCameras={can('camera.manage')} />
         )}
         {mode === 'archive' && (
           <ArchiveView api={session.api} apiFor={apiFor} cameras={cameras} groups={groups} layouts={layouts}
             openRequest={openRequest} onRequestConsumed={consumeRequest} onLayoutsChanged={refresh}
             onExportsChanged={onExportsChanged} canExport={can('camera.manage')}
-            onConfig={(id: string, name: string) => setConfig({ id, name })}
+            onConfig={(id: string, name: string) => setConfig({ id, name, ativa: cameras.find((c) => c.id === id)?.ativa })}
             onRename={renameFromStage} canManageCameras={can('camera.manage')} />
         )}
       </main>
