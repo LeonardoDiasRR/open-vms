@@ -50,6 +50,8 @@ services:
       # ponytail: paridade com a producao (o /tmp/ovms.env dela tem exatamente isto).
       # Em host mode os padroes do codigo (127.0.0.1:9997 / 8891 / 8554) ja sao os certos.
       OPENVMS_LIVE: "${OPENVMS_LIVE:-1}"
+      # Config dentro do bind mount de diretorio (ver volumes do servico api).
+      OPENVMS_CONFIG: /app/conf/config.yaml
     # ponytail: a API precisa do MESMO 127.0.0.1 que o processo atual ve — o Hub escuta a
     # Control API e o HLS SO no loopback do host (medido: 127.0.0.1:9997 e 127.0.0.1:8891),
     # e a Control API nao tem autenticacao, entao expo-la na rede seria regressao. Em host
@@ -62,8 +64,10 @@ services:
       - ovms-data:/app/data
       - ovms-playback-cache:/app/playback-cache
       # Every-day configuration (retention, disk ceiling, archive root). Read/write: the Settings
-      # modal writes it through PATCH /api/v1/settings.
-      - ./config.yaml:/app/config.yaml
+      # modal writes it through PATCH /api/v1/settings. O config NAO pode ser bind mount de
+      # arquivo unico: o servidor salva com write-tmp + rename, e rename sobre mount point da
+      # EBUSY. Monta-se o diretorio conf/ e aponta-se OPENVMS_CONFIG para dentro dele.
+      - ./conf:/app/conf
       # Raiz das gravacoes no share NFS do host (montado no host via fstab). O bind passa o
       # mount do host para dentro; sem o share montado o worker de gravacao falha com erro visivel.
       - ${OVMS_MEDIA_PATH:-/mnt/archive/openvms}:/mnt/archive/openvms
