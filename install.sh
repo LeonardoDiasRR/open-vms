@@ -41,8 +41,13 @@ fi
 sudo mkdir -p "$MEDIA_DIR"
 sudo chown "$(id -u):$(id -g)" "$MEDIA_DIR"
 sudo chmod 700 "$MEDIA_DIR"
-if [ ! -e "$INSTALL_DIR/config.yaml" ]; then
-  die "Arquivo config.yaml ausente."
+if [ ! -e "$INSTALL_DIR/conf/config.yaml" ]; then
+  if [ -e "$INSTALL_DIR/config.yaml" ]; then
+    say "Instalacao antiga: movendo config.yaml para conf/config.yaml."
+    sudo mkdir -p "$INSTALL_DIR/conf"; sudo mv "$INSTALL_DIR/config.yaml" "$INSTALL_DIR/conf/config.yaml"
+  else
+    die "Arquivo conf/config.yaml ausente."
+  fi
 fi
 say "Validando Compose..."
 (cd "$INSTALL_DIR" && "${DOCKER[@]}" compose config --quiet)
