@@ -44,4 +44,18 @@ describe('dictionaries', () => {
       expect((en as Record<string, string>)[k], `en ${k}`).toBeTruthy();
     }
   });
+
+  // plan 2026-11-06: as chaves da modal de senha temporaria (o toast temp_password morreu junto).
+  it('has the temporary-password modal keys', () => {
+    const KEYS = ['admin.users.pwd_title', 'admin.users.pwd_warning', 'admin.users.pwd_warning_strong',
+      'admin.users.pwd_second_a', 'admin.users.pwd_second_b', 'admin.users.pwd_close',
+      'admin.users.pwd_label', 'admin.users.pwd_hint',
+      'admin.users.pwd_copy', 'admin.users.pwd_copied', 'admin.users.pwd_copy_failed'] as const;
+    for (const k of KEYS) {
+      expect((ptBR as Record<string, string>)[k], `pt-BR ${k}`).toBeTruthy();
+      expect((en as Record<string, string>)[k], `en ${k}`).toBeTruthy();
+    }
+    expect((ptBR as Record<string, string>)['admin.users.temp_password']).toBeUndefined();
+    expect((en as Record<string, string>)['admin.users.temp_password']).toBeUndefined();
+  });
 });
