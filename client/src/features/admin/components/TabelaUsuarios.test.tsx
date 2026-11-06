@@ -279,15 +279,40 @@ describe('UsersTable (spec 2026-10-18 4.3; server-side since 2026-10-20 §5)', (
     expect(api.deleteUser).not.toHaveBeenCalled();
   });
 
-  it('the reset shows the temporary password once, in the toast', async () => {
+  it('the reset opens the modal with the password in a locked field', async () => {
     notify.mockClear();
     const api = fakeApi();
     renderTable(api);
     await screen.findByText('ana');
     fireEvent.click(screen.getByRole('button', { name: 'Reset password for ana' }));
     await waitFor(() => expect(api.resetPassword).toHaveBeenCalledWith('ana'));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringContaining('Temp-123456789012345')));
-    // the screen body does NOT keep the temporary one: it lives in the toast, which is what goes away by itself
+    await screen.findByLabelText('Temporary password');
+    const campo = screen.getByLabelText('Temporary password') as HTMLInputElement;
+    expect(campo.value).toBe('Temp-123456789012345');
+    expect(campo.readOnly).toBe(true);
+    // the toast is NOT the carrier of the password anymore
+    expect(notify.mock.calls.join('\n')).not.toContain('Temp-123456789012345');
+  });
+
+  it('the reset modal closes on Close and the table stays usable', async () => {
+    const api = fakeApi();
+    renderTable(api);
+    await screen.findByText('ana');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password for ana' }));
+    await screen.findByLabelText('Temporary password');
+    // shared.close in the EN dictionary (vitest.setup pins 'en') is 'Close' — the plan's 'Fechar' is the PT text
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByLabelText('Temporary password')).toBeNull();
+    expect(await screen.findByText('ana')).toBeTruthy();
+  });
+
+  it('the reset modal keeps the password out of the page text', async () => {
+    const api = fakeApi();
+    renderTable(api);
+    await screen.findByText('ana');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password for ana' }));
+    await screen.findByLabelText('Temporary password');
+    // o valor do input nao e texto do DOM: achar a senha no texto da pagina = vazamento
     expect(screen.queryByText(/Temp-123456789012345/)).toBeNull();
   });
 

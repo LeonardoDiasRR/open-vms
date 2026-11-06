@@ -12,11 +12,13 @@ import { useEsc } from '@/shared/hooks/useEsc';
 import { useModalFocus } from '@/shared/hooks/useFocoModal';
 import { useT } from '@/shared/i18n';
 import DataTable, { Cell, type Column } from './TabelaDados';
+import SenhaTemporariaModal from './SenhaTemporariaModal';
 import { PAGE_SIZE_OPTIONS, type Query } from '../hooks/useTabelaDados';
 
 // spec 2026-10-18 (4.3): the Users tab in the data table pattern. The profile is REQUIRED on create
 // and the password policy belongs to the SERVER: here only the 400 message is shown (E5). The reset
-// returns the temporary password ONCE and it goes to the app toast.
+// returns the temporary password ONCE, in the SenhaTemporariaModal (plan 2026-11-06; it used to go
+// to the app toast, which lived 2,6 s and hid the password).
 // spec 2026-10-20 §5: the table is server-side — the profile NAME comes from the JOIN (`profile_name`),
 // and the whole profile list is fetched once for the form's select.
 type Api = Pick<ApiClient, 'users' | 'accessProfiles' | 'createUser' | 'patchUser' | 'renameUser'
@@ -36,6 +38,8 @@ export default function UsersTable({ api, dlg, notify = noNotify }:
   const [page, setPage] = useState<{ rows: User[]; total: number }>({ rows: [], total: 0 });
   const [profiles, setProfiles] = useState<AccessProfile[]>([]);
   const [editing, setEditing] = useState<EditState | null>(null);
+  // plan 2026-11-06: o resultado do reset (a senha temporaria) mora aqui enquanto o modal esta aberto.
+  const [senhaTemp, setSenhaTemp] = useState<{ username: string; password: string } | null>(null);
   // The query in force: after a create/edit/delete the tab re-reads the SAME page it was on.
   const lastQuery = useRef<UsersQuery>({ limit: PAGE_SIZE_OPTIONS[0] });
 
@@ -71,8 +75,9 @@ export default function UsersTable({ api, dlg, notify = noNotify }:
     if (!confirmed) return;
     try {
       const r = await api.resetPassword(u.username);
-      // the temporary password shows up ONCE, in the toast (spec 4.3)
-      notify(t('admin.users.temp_password', { name: r.username, password: r.temporary_password }));
+      // plan 2026-11-06: a senha sai numa modal que nao some sozinha (o toast de 2,6 s vivia pouco);
+      // reload imediato para o badge "troca pendente" aparecer atras do modal.
+      setSenhaTemp({ username: r.username, password: r.temporary_password });
       await reload();
     } catch (e) { notify(errMessage(e, t('admin.users.reset_failed')), 'error'); }
   }
@@ -157,6 +162,10 @@ export default function UsersTable({ api, dlg, notify = noNotify }:
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }}
         />
+      )}
+      {senhaTemp && (
+        <SenhaTemporariaModal username={senhaTemp.username} password={senhaTemp.password}
+          onClose={() => setSenhaTemp(null)} notify={notify} />
       )}
     </>
   );
