@@ -27,9 +27,12 @@ export function useToasts(): { notices: Notice[]; notify: Notify } {
 }
 
 export function Toasts({ notices }: { notices: Notice[] }) {
+  // Canto: SUPERIOR direito (2026-11-06). O aviso mais novo é o primeiro do DOM, então ele nasce
+  // encostado no canto e a pilha cresce para baixo, na ordem em que o olho lê. O array continua
+  // [mais antigo ... mais novo]: inverter o array do `useToasts` mudaria o dedupe e o teto de 3 por nada.
   return (
-    <div className="nx-toast fixed right-4 bottom-4 flex flex-col gap-2" role="status" aria-live="polite">
-      {notices.map((a) => (
+    <div className="nx-toast fixed right-4 top-4 flex flex-col gap-2" role="status" aria-live="polite">
+      {[...notices].reverse().map((a) => (
         <div key={a.id}
           className={`rounded-md border bg-card px-3 py-2 text-xs shadow-xs ${a.kind === 'error' ? 'border-destructive text-destructive' : 'border-border text-foreground'}`}>
           {a.text}
