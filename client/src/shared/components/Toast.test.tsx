@@ -62,4 +62,26 @@ describe('Toast', () => {
     click('ok'); click('ok');
     expect(screen.getAllByText('salvo').length).toBe(1);
   });
+
+  it('nasce no canto superior direito da janela', () => {
+    const { container } = render(<Bench />);
+    const region = container.querySelector('[role="status"]')!;
+    const classes = region.className.split(/\s+/);
+    expect(classes).toContain('fixed');
+    expect(classes).toContain('top-4');
+    expect(classes).toContain('right-4');
+    // 'bottom-4' ainda ancoraria embaixo: o canto antigo não pode sobreviver
+    expect(classes).not.toContain('bottom-4');
+  });
+
+  it('o aviso mais novo fica no topo da pilha, encostado no canto', () => {
+    render(<Bench />);
+    for (const n of ['n1', 'n2', 'n3']) click(n);
+    const itens = Array.from(document.querySelectorAll('.nx-toast > div'));
+    expect(itens.map((e) => e.textContent?.trim())).toEqual([
+      'aviso 3',
+      'aviso 2',
+      'aviso 1',
+    ]);
+  });
 });
