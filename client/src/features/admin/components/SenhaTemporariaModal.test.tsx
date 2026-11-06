@@ -30,7 +30,7 @@ describe('SenhaTemporariaModal', () => {
     expect(screen.getByText('will not be shown again')).toBeTruthy();
     // en (pinned pelo vitest.setup): rodape = shared.close 'Close'; o X do canto tem textContent '✕'
     expect(screen.getAllByRole('button').map((b) => b.textContent?.trim()).sort())
-      .toEqual(['Close', '⎘', '✕'].sort());
+      .toEqual(['Close', '\u29c9', '\u2715'].sort());
   });
 
   it('copia a senha e notifica', async () => {

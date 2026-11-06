@@ -52,7 +52,7 @@ export default function SenhaTemporariaModal({ username, password, onClose, noti
               <input className="nx-input" id="stm-campo" readOnly value={password}
                 spellCheck={false} autoComplete="off" autoFocus onFocus={(e) => e.target.select()} />
               <button className="nx-copiar" onClick={copiarSenha} title={t('admin.users.pwd_copy')}
-                aria-label={t('admin.users.pwd_copy')}>{copiado ? '✓' : '⎘'}</button>
+                aria-label={t('admin.users.pwd_copy')}>{copiado ? '\u2713' : '\u29c9'}</button>
             </div>
             <p className="nx-senha-dica">{t('admin.users.pwd_hint')}</p>
           </div>
