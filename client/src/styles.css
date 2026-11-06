@@ -72,7 +72,9 @@
   --space-lg: 10px; --space-xl: 14px; --space-xxl: 18px;
   --radius-xs: 2px; --radius-sm: 3px; --radius-md: 4px; --radius-lg: 6px;
   --z-panel: 1; --z-overlay: 40; --z-menu: 50; --z-dialog: 60;
-  --z-modal-alta: 70; /* plan 2026-11-06: modal que empilha sobre outro dialog (e sobre o toast, que fica em cima) */
+  --z-modal-alta: 70; /* plan 2026-11-06: modal que empilha sobre outro dialog (Administracao, z-dialog 60) */
+  --z-toast: 80;      /* plan 2026-11-06: o aviso confirma uma acao feita com uma modal aberta e tem de
+                         nascer na frente dela; nao basta o acaso do aninhamento do DOM. */
   --dur-fast: 120ms; --dur-spin: 800ms;
   --ease-out: cubic-bezier(.2, .8, .2, 1);
   font: 13px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -965,9 +967,12 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .nx-uuid { display: inline-flex; align-items: center; gap: 6px; }
 .nx-copiar { background: none; border: 1px solid var(--border); border-radius: var(--radius-md); color: inherit; cursor: pointer; padding: 0 6px; line-height: 1.6; }
 /* plan 2026-11-06 (modal de senha temporaria): o backdrop do modal empilha sobre o dialog que o
-   abriu (Administracao, z-dialog 60). O toast continua em --z-dialog: o "Senha copiada" aparece
-   DEPOIS do modal, que e a ordem do prototipo aprovado. */
+   abriu (Administracao, z-dialog 60). O aviso de "senha copiada" fica ACIMA desta modal, no degrau
+   --z-toast: ele e o feedback da acao feita com esta modal aberta. */
 .nx-backdrop.nx-backdrop-alta { z-index: var(--z-modal-alta); }
+/* o empilhamento do aviso e do modal e uma REGRA, nao um efeito colateral do aninhamento no DOM:
+   80 acima de 70, entao o toast continua na frente mesmo se a modal mudar de pai (portal). */
+.nx-toast { z-index: var(--z-toast); }
 .nx-campo-senha { display: flex; gap: 8px; align-items: center; }
 .nx-campo-senha .nx-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .4px; }
 /* o .nx-copiar de cima e inline (fica ao lado do UUID); no campo ele tem a altura do input */
@@ -1397,7 +1402,7 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .nx-cta-linha.nx-linha-opcoes { justify-content: flex-start; gap: 24px; }
 
 /* popover do seletor de pastas: mesma superficie do .user-menu (wrap relativo + painel absoluto;
-   --z-overlay = 40: acima do conteudo, abaixo do toast 60) */
+   --z-overlay = 40: acima do conteudo, abaixo do toast 80) */
 .nx-pasta-wrap { position: relative; }
 .nx-pop {
   position: absolute; top: 100%; left: 0; z-index: var(--z-overlay);

@@ -80,4 +80,24 @@ describe('design-system guard (spec 2026-10-17, M4)', () => {
     expect(names.length).toBeGreaterThanOrEqual(18);       // a broken parse cannot pass by emptiness
     expect(names.filter((n) => !SPEC_TABLE.has(n))).toEqual([]);
   });
+
+  // 4 (plan 2026-11-06): the notice must be born IN FRONT of the modal that stays open under it, because
+  // it confirms the action taken there. It used to win by accident: the modal's z-index only counts
+  // inside the stacking context of the backdrop that contains it, so the toast won by nesting luck.
+  // Luck is not a rule — a portal reparenting the modal would hide the notice again. Same reading
+  // style as the checks above: text, no jsdom, no measurement.
+  it('4: the --z-* scale keeps the notice above the stacked modal', () => {
+    const step = (name: string) => {
+      const raw = new RegExp(`--z-${name}:\\s*(\\d+)`).exec(css)?.[1];
+      expect(raw, `token --z-${name} missing in :root`).toBeTruthy();
+      return Number(raw);
+    };
+    expect(step('toast')).toBeGreaterThan(step('modal-alta'));
+    expect(step('modal-alta')).toBeGreaterThan(step('dialog'));
+
+    const toast = readFileSync(join(ROOT, 'shared', 'components', 'Toast.tsx'), 'utf8');
+    expect(css).toMatch(/\.nx-toast\s*\{\s*z-index:\s*var\(--z-toast\)/);
+    expect(toast).toContain('nx-toast');
+    expect(toast, 'no literal z-index: the scale is the single source').not.toMatch(/z-\[\d+\]/);
+  });
 });
