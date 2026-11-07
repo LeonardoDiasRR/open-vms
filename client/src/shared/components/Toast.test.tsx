@@ -114,4 +114,22 @@ describe('Toast', () => {
       'aviso 1',
     ]);
   });
+
+  it('item no tamanho B: 14px com respiro 12/16 e pilha de 10px', () => {
+    // Spec 2026-11-06 (toast maior). O tamanho vem dos utilitarios do design system, nao de valor solto:
+    // text-sm = 14px (line-height do proprio token = 20px), px-4 = 16px, py-3 = 12px, gap-2.5 = 10px.
+    render(<Bench />);
+    click('ok');
+    const item = screen.getByText('salvo');
+    const cItem = item.className.split(/\s+/);
+    const cPilha = screen.getByRole('status').className.split(/\s+/);
+    for (const cls of ['text-sm', 'px-4', 'py-3']) expect(cItem, `item precisa de ${cls}`).toContain(cls);
+    expect(cPilha, 'pilha precisa de gap-2.5').toContain('gap-2.5');
+    // as classes antigas nao podem sobreviver: 'gap-2' e prefixo de 'gap-2.5', por isso a comparaeao e
+    // por token exato depois do split, nunca com includes() no className inteiro.
+    for (const antiga of ['text-xs', 'px-3', 'py-2', 'gap-2']) {
+      expect(cItem, `sobrou ${antiga} no item`).not.toContain(antiga);
+      expect(cPilha, `sobrou ${antiga} na pilha`).not.toContain(antiga);
+    }
+  });
 });
