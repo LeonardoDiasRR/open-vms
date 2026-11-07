@@ -33,10 +33,10 @@ export function Toasts({ notices }: { notices: Notice[] }) {
   // baixo. O array continua [mais antigo ... mais novo]: inverter o do `useToasts` mudaria o dedupe
   // e o teto de 3 por nada.
   return (
-    <div className="nx-toast fixed flex flex-col gap-2" role="status" aria-live="polite">
+    <div className="nx-toast fixed flex flex-col gap-2.5" role="status" aria-live="polite">
       {[...notices].reverse().map((a) => (
         <div key={a.id}
-          className={`rounded-md border bg-card px-3 py-2 text-xs shadow-xs ${a.kind === 'error' ? 'border-destructive text-destructive' : 'border-border text-foreground'}`}>
+          className={`rounded-md border bg-card px-4 py-3 text-sm shadow-xs ${a.kind === 'error' ? 'border-destructive text-destructive' : 'border-border text-foreground'}`}>
           {a.text}
         </div>
       ))}
