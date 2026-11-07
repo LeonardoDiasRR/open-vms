@@ -80,7 +80,7 @@ export default function App() {
   // spec 2026-10-18 (header "Cameras" filters): the 📁 sends a SIGNAL to both trees (n grows on every
   // click; open toggles: 1st click opens everything, 2nd closes everything). The dot cycles the camera
   // section: null (all) -> 'with' recording -> 'without' recording -> null.
-  const [folderSignal, setFolderSignal] = useState({ open: false, n: 0 });
+  const [folderSignal, setFolderSignal] = useState({ open: true, n: 0 });
   const [recordingFilter, setRecordingFilter] = useState<'with' | 'without' | null>(null);
   // spec 2026-10-17: new export notice. The list lives in the right panel and this counter is what tells
   // it to refetch when the Archive page export flow finishes (no polling in the panel).
