@@ -190,8 +190,7 @@ function ProfileForm({ api, cameras, profile, notify, onClose, onSaved }:
       if (!profile) {
         // with no grant marked the body is still only the name (previous behavior preserved)
         await api.createAccessProfile(grants.length ? { name: name.trim(), grants } : { name: name.trim() });
-        // missing keys: admin.profiles.created / admin.profiles.updated
-        notify(`Profile ${name.trim()} created`);
+        notify(t('admin.profiles.created', { name: name.trim() }));
       } else {
         // The draft only covers the cameras of the current list: a grant for an already deleted camera
         // stays valid, so the orphans come back in the body. And the comparison is made over the same
@@ -205,7 +204,7 @@ function ProfileForm({ api, cameras, profile, notify, onClose, onSaved }:
         // No body means no PATCH: the "updated" toast would be a lie.
         if (Object.keys(body).length) {
           await api.patchAccessProfile(profile.id, body);
-          notify(`Profile ${name.trim()} updated`);
+          notify(t('admin.profiles.updated', { name: name.trim() }));
         }
       }
       await onSaved();

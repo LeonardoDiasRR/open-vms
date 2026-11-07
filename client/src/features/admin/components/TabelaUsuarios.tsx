@@ -63,8 +63,7 @@ export default function UsersTable({ api, dlg, notify = noNotify }:
     const next = u.status === 'active' ? 'disabled' : 'active';
     try {
       await api.patchUser(u.username, { status: next });
-      // missing key: admin.users.blocked / admin.users.activated
-      notify(next === 'disabled' ? `${u.username} blocked` : `${u.username} activated`);
+      notify(next === 'disabled' ? t('admin.users.blocked', { name: u.username }) : t('admin.users.activated', { name: u.username }));
       await reload();
     } catch (e) { notify(errMessage(e, t('admin.users.status_failed')), 'error'); }
   }
