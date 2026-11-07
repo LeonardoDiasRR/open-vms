@@ -27,9 +27,8 @@ export function useToasts(): { notices: Notice[]; notify: Notify } {
 }
 
 export function Toasts({ notices }: { notices: Notice[] }) {
-  // Canto: SUPERIOR DIREITO DA AREA UTIL (spec 2026-11-06). A ancora vive em `.nx-toast` no
-  // styles.css, lida de --alt-topbar e --col-dir, porque o aviso nao deve cobrir header, painel
-  // direito nem a alca de redimensionamento. Nenhuma classe de canto aqui: a posicao tem UMA fonte.
+  // Canto: SUPERIOR DIREITO DA AREA UTIL (spec 2026-11-06), ancorado em `.nx-toast` no styles.css.
+  // Nenhuma classe de canto aqui: a posicao tem UMA fonte.
   // O aviso mais novo e o primeiro do DOM, entao a pilha nasce encostada no canto e cresce para
   // baixo. O array continua [mais antigo ... mais novo]: inverter o do `useToasts` mudaria o dedupe
   // e o teto de 3 por nada.

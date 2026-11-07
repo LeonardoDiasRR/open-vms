@@ -979,7 +979,8 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
    arraste inline): sem JavaScript o aviso acompanha recolher, expandir e arrastar. Todo var() tem
    fallback 0px porque a pagina /design monta <Toasts> FORA do .shell, e uma calc() com var()
    invalida descarta a declaracao inteira — o aviso pulava para a esquerda (medido). O 1px e o gap
-   do grid; 16px e o respiro aprovado pelo operador; os 4px do max-width sao as duas alcas de 2px.
+   do grid; 16px e o respiro aprovado pelo operador. Os 40px do max-width dao 16px de respiro em cada
+   borda mais as duas alcas (2+2) e os dois gaps (1+1): 38px arredondados para cima, com folga.
    pointer-events:none porque nada dentro de um aviso e clicavel e a pilha flutua sobre celulas. */
 .nx-toast {
   z-index: var(--z-toast);
