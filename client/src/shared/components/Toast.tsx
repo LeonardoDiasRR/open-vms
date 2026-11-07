@@ -27,11 +27,14 @@ export function useToasts(): { notices: Notice[]; notify: Notify } {
 }
 
 export function Toasts({ notices }: { notices: Notice[] }) {
-  // Canto: SUPERIOR direito (2026-11-06). O aviso mais novo é o primeiro do DOM, então ele nasce
-  // encostado no canto e a pilha cresce para baixo, na ordem em que o olho lê. O array continua
-  // [mais antigo ... mais novo]: inverter o array do `useToasts` mudaria o dedupe e o teto de 3 por nada.
+  // Canto: SUPERIOR DIREITO DA AREA UTIL (spec 2026-11-06). A ancora vive em `.nx-toast` no
+  // styles.css, lida de --alt-topbar e --col-dir, porque o aviso nao deve cobrir header, painel
+  // direito nem a alca de redimensionamento. Nenhuma classe de canto aqui: a posicao tem UMA fonte.
+  // O aviso mais novo e o primeiro do DOM, entao a pilha nasce encostada no canto e cresce para
+  // baixo. O array continua [mais antigo ... mais novo]: inverter o do `useToasts` mudaria o dedupe
+  // e o teto de 3 por nada.
   return (
-    <div className="nx-toast fixed right-4 top-4 flex flex-col gap-2" role="status" aria-live="polite">
+    <div className="nx-toast fixed flex flex-col gap-2" role="status" aria-live="polite">
       {[...notices].reverse().map((a) => (
         <div key={a.id}
           className={`rounded-md border bg-card px-3 py-2 text-xs shadow-xs ${a.kind === 'error' ? 'border-destructive text-destructive' : 'border-border text-foreground'}`}>
