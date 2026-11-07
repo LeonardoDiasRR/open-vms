@@ -78,7 +78,8 @@ export default function App() {
   const [userMenu, setUserMenu] = useState(false);
   const [filter, setFilter] = useState('');
   // spec 2026-10-18 (header "Cameras" filters): the 📁 sends a SIGNAL to both trees (n grows on every
-  // click; open toggles: 1st click opens everything, 2nd closes everything). The dot cycles the camera
+  // click; open toggles: 1st click closes everything, 2nd opens everything — parity flipped by spec
+  // 2026-11-06). The dot cycles the camera
   // section: null (all) -> 'with' recording -> 'without' recording -> null.
   const [folderSignal, setFolderSignal] = useState({ open: true, n: 0 });
   const [recordingFilter, setRecordingFilter] = useState<'with' | 'without' | null>(null);
