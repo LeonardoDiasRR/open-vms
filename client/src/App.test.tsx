@@ -421,6 +421,20 @@ describe('the DVR as a folder (item 1.3)', () => {
     // and the camera still enters the new folder, as "Create group" always did
     await waitFor(() => expect(fakes.moveCamera).toHaveBeenCalledWith('c1', 'g9'));
   });
+
+  it('the folder button FIRST click closes every folder; the second opens again (inversao de paridade)', async () => {
+    fakes.groups = [{ id: 'g1', name: 'Alfa', parent_id: null }];
+    renderApp();
+    await screen.findByText('Alfa');
+    // carga: pasta aberta (estado neutro nao muda)
+    expect(screen.getByRole('button', { name: 'Collapse Alfa' })).toHaveAttribute('aria-expanded', 'true');
+    // 1o clique: fecha tudo (paridade invertida — spec 2026-11-06)
+    fireEvent.click(screen.getByRole('button', { name: 'Expand or collapse all folders' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Expand Alfa' })).toHaveAttribute('aria-expanded', 'false'));
+    // 2o clique: abre de novo
+    fireEvent.click(screen.getByRole('button', { name: 'Expand or collapse all folders' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Collapse Alfa' })).toHaveAttribute('aria-expanded', 'true'));
+  });
 });
 
 // spec 2026-10-17 (header search): the sidebar's first row is search + toggle.
