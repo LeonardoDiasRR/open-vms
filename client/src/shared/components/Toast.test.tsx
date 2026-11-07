@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Toasts, useToasts } from './Toast';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// jsdom nao aplica folha de estilo nem modelo de layout, entao a ancora e pinada como TEXTO do
+// styles.css, no idioma de `divisor.test.ts`. O seletor do bloco e unico no arquivo.
+const css = readFileSync(join(process.cwd(), 'src', 'styles.css'), 'utf8');
+const block = (sel: string) => new RegExp(sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(css)?.[1] ?? '';
 
 function Bench() {
   const { notices, notify } = useToasts();
@@ -63,15 +70,38 @@ describe('Toast', () => {
     expect(screen.getAllByText('salvo').length).toBe(1);
   });
 
-  it('nasce no canto superior direito da janela', () => {
+  it('nasce na area util, abaixo do header e a esquerda do painel direito', () => {
     const { container } = render(<Bench />);
-    const region = container.querySelector('[role="status"]')!;
-    const classes = region.className.split(/\s+/);
+    const classes = container.querySelector('[role="status"]')!.className.split(/\s+/);
     expect(classes).toContain('fixed');
-    expect(classes).toContain('top-4');
-    expect(classes).toContain('right-4');
-    // 'bottom-4' ainda ancoraria embaixo: o canto antigo não pode sobreviver
-    expect(classes).not.toContain('bottom-4');
+    // o canto da janela (2026-11-06 de manha) nao pode sobreviver: a ancora passou a viver so no CSS
+    for (const antiga of ['top-4', 'right-4', 'bottom-4']) expect(classes).not.toContain(antiga);
+    const bloco = block('.nx-toast');
+    expect(bloco).toMatch(/top:\s*calc\(var\(--alt-topbar,\s*0px\)\s*\+\s*1px\s*\+\s*16px\)/);
+    expect(bloco).toMatch(/right:\s*calc\(var\(--col-dir,\s*0px\)\s*\+\s*16px\)/);
+    expect(bloco).toMatch(/max-width:\s*calc\(100vw\s*-\s*var\(--col-esq,\s*0px\)\s*-\s*var\(--col-dir,\s*0px\)\s*-\s*40px\)/);
+    expect(bloco).toContain('pointer-events: none');
+  });
+
+  it('nenhuma var() da ancora do toast esta sem fallback', () => {
+    // uma calc() com var() sem valor invalida a DECLARACAO inteira: fora do .shell (pagina /design)
+    // o browser descartaria o `right` e o aviso puleria para a esquerda da tela (spec 3.2, medido).
+    // Mira so as declaracoes da ANCORA: `z-index: var(--z-toast)` e legitimo sem fallback porque
+    // --z-toast vive no :root (global), nao no .shell — emenda E1.
+    const ancora = block('.nx-toast').split(';').filter((d) => /^\s*(top|right|max-width)\s*:/.test(d));
+    expect(ancora.length, 'as tres declaracoes da ancora existem').toBe(3);
+    const semFallback = ancora
+      .flatMap((d) => [...d.matchAll(/var\((--[\w-]+)([^)]*)\)/g)])
+      .filter((m) => !m[2].trim());
+    expect(semFallback.map((m) => m[1])).toEqual([]);
+  });
+
+  it('a ancora le a altura do header da mesma fonte que o grid', () => {
+    // se alguem voltar a escrever `40px` no grid-template-rows, o aviso fica flutuando na altura
+    // errada sem nenhum teste vermelho (spec 4.3).
+    const shell = block('.shell');
+    expect(shell).toMatch(/--alt-topbar:\s*40px/);
+    expect(shell).toMatch(/grid-template-rows:\s*var\(--alt-topbar\)\s+1fr\s+24px/);
   });
 
   it('o aviso mais novo fica no topo da pilha, encostado no canto', () => {

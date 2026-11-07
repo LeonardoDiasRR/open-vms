@@ -182,11 +182,13 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
      tocar em nenhuma outra regra (spec 2026-10-16, secao 5). */
   --col-esq: 220px;
   --col-dir: 260px;
+  /* altura do topbar: uma fonte so, lida pelo grid e pela ancora do toast (spec 2026-11-06, 3.1). */
+  --alt-topbar: 40px;
   /* spec 2026-10-18: as DUAS trilhas de 2px sao o espaco da alca. O scrollbar de qualquer regiao que
      rola fica DENTRO da coluna do painel; a trilha da alca nao tem nada sobreposto — e a garantia
      estrutural que a sonda D mediu (a prioridade de hit sobre o scrollbar e do engine, nao nossa). */
   grid-template-columns: var(--col-esq) 2px 1fr 2px var(--col-dir);
-  grid-template-rows: 40px 1fr 24px;
+  grid-template-rows: var(--alt-topbar) 1fr 24px;
   grid-template-areas:
     'topbar topbar topbar topbar topbar'
     'sidebar alca-esq scene alca-dir rightpanel'
@@ -972,7 +974,21 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .nx-backdrop.nx-backdrop-alta { z-index: var(--z-modal-alta); }
 /* o empilhamento do aviso e do modal e uma REGRA, nao um efeito colateral do aninhamento no DOM:
    80 acima de 70, entao o toast continua na frente mesmo se a modal mudar de pai (portal). */
-.nx-toast { z-index: var(--z-toast); }
+/* Ancora na AREA UTIL, nao no canto da janela (spec 2026-11-06). O toast e filho do .shell, entao
+   herda --col-dir / --col-esq que o App ja mantem certos em todo estado (padrao, .rec-dir 32px e
+   arraste inline): sem JavaScript o aviso acompanha recolher, expandir e arrastar. Todo var() tem
+   fallback 0px porque a pagina /design monta <Toasts> FORA do .shell, e uma calc() com var()
+   invalida descarta a declaracao inteira — o aviso pulava para a esquerda (medido). O 1px e o gap
+   do grid; 16px e o respiro aprovado pelo operador. Os 40px do max-width dao 16px de respiro em cada
+   borda mais as duas alcas (2+2) e os dois gaps (1+1): 38px arredondados para cima, com folga.
+   pointer-events:none porque nada dentro de um aviso e clicavel e a pilha flutua sobre celulas. */
+.nx-toast {
+  z-index: var(--z-toast);
+  top: calc(var(--alt-topbar, 0px) + 1px + 16px);
+  right: calc(var(--col-dir, 0px) + 16px);
+  max-width: calc(100vw - var(--col-esq, 0px) - var(--col-dir, 0px) - 40px);
+  pointer-events: none;
+}
 .nx-campo-senha { display: flex; gap: 8px; align-items: center; }
 .nx-campo-senha .nx-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .4px; }
 /* o .nx-copiar de cima e inline (fica ao lado do UUID); no campo ele tem a altura do input */
