@@ -576,3 +576,54 @@ describe('server roots', () => {
     expect(row.querySelector('.tree-filhos')).not.toBeNull();
   });
 });
+
+// contagem (ativas/total) na linha do servidor (protótipo v5 aprovado 2026-11-13)
+describe('server camera count', () => {
+  const noop3 = () => {};
+  const servers = [
+    { id: 'http://a', label: 'Local', online: true },
+    { id: 'http://b', label: 'PAC', online: false },
+  ];
+  const cams = [
+    { id: 'a1', name: 'A1', state: 'online', server_id: 'http://a' },
+    { id: 'a2', name: 'B2', state: 'offline', server_id: 'http://a' },
+    { id: 'a3', name: 'C3', state: 'online', server_id: 'http://a' },
+    { id: 'b1', name: 'D1', state: 'online', server_id: 'http://b' },
+    { id: 'b2', name: 'E2', state: 'online', server_id: 'http://b' },
+  ];
+  const props = { groups: [], cameras: cams, devices: [], selected: null, onSelect: noop3, onAction: noop3, onDrop: noop3, servers };
+  const contagem = (row: Element | null) => row?.querySelector('.tree-nome .tree-contagem')?.textContent;
+
+  it('shows (online/total) on each server row; offline server counts zero actives', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    const rows = [...container.querySelectorAll('.tree-servidor')];
+    expect(contagem(rows[0])).toBe('(2/3)');
+    expect(contagem(rows[1])).toBe('(0/2)'); // offline: nenhuma ativa, total do catálogo
+  });
+
+  it('the number lives INSIDE the name element, after the name text (never pushed by the dots margin)', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    const nome = container.querySelector('.tree-servidor .tree-nome')!;
+    expect([...nome.children].map((e) => e.className)).toEqual(['tree-nome-texto', 'tree-contagem']);
+    expect(nome.querySelector('.tree-nome-texto')?.textContent).toBe('Local');
+  });
+
+  it('the text filter does not change the count (full catalog of that server)', () => {
+    const { container } = renderTree(<CameraTree {...props} filter="A1" />);
+    expect(contagem(container.querySelector('.tree-servidor'))).toBe('(2/3)');
+  });
+
+  it('camera rows carry no count', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    expect(container.querySelectorAll('.tree-camera .tree-contagem')).toHaveLength(0);
+  });
+
+  it('offline: the count comes before the (Disconnected) suffix in the row', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    const row = [...container.querySelectorAll('.tree-servidor')][1];
+    const cnt = row.querySelector('.tree-contagem')!, est = row.querySelector('.tree-estado')!;
+    // eslint-disable-next-line no-bitwise
+    expect(cnt.compareDocumentPosition(est) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(est.textContent).toBe('(Disconnected)');
+  });
+});

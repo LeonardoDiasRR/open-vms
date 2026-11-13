@@ -364,9 +364,12 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
   // CSS em styles.css), o sufixo "(Desconectado)" e o ⋯ é SUBSTITUÍDO pelo botão de reconexão;
   // o CTA "+" some (não se adiciona câmera a um servidor morto). Menu completo segue no botão direito.
   // Sem drag do nó, sem drop no nó, sem palco: duplo-clique só expandre/recolhe.
-  function renderServer(s: ServerNode, childNodes: TreeNode<Camera>[]) {
+  function renderServer(s: ServerNode, childNodes: TreeNode<Camera>[], contagem: { ativas: number; total: number }) {
     const open = !closed.includes(s.id);
     const off = !s.online;
+    // contagem aprovada (protótipo v5, 2026-11-13): ativas = câmeras com estado online no catálogo
+    // do servidor; servidor offline conta 0 ativas (nada está acessível — exemplo aprovado).
+    // O total vem da lista COMPLETA daquele servidor, nunca da visão filtrada pelo texto.
     return (
       <li
         key={s.id}
@@ -392,7 +395,13 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
             {open ? '▾' : '▸'}
           </span>
           <span className="tree-icone" aria-hidden="true">🖥</span>
-          <span className="tree-nome">{s.label}</span>
+          {/* contagem (ativas/total) DENTRO do mesmo item do nome (protótipo v5 aprovado): nenhum
+              auto-margem do "⋯" pode empurrar o número para a direita — ele nasce colado no nome e o
+              nome trunca antes dele. */}
+          <span className="tree-nome">
+            <span className="tree-nome-texto">{s.label}</span>
+            <span className="tree-contagem">({contagem.ativas}/{contagem.total})</span>
+          </span>
           {off && <span className="tree-estado">{t('servers.offline_suffix')}</span>}
           {/* CTA verde aprovado no protótipo (v5 traço, 2026-11-12): "+" + câmera de vídeo em SVG com
               currentColor (verde no repouso, escuro no hover — o emoji não acompanha o CTA). Abre o
@@ -459,10 +468,16 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
   const nodes = buildTree(flat.groups, flat.cameras, flat.devices);
   // Uma sub-árvore por servidor com os dados daquele server_id (spec 5.3): buildTree/filterCameras
   // chamados por servidor, nunca sobre a lista mescla.
-  const serverViews = servers.map((s) => ({
-    server: s,
-    view: viewFor(groups.filter((g) => g.server_id === s.id), cameras.filter((c) => c.server_id === s.id), devices.filter((d) => d.server_id === s.id)),
-  }));
+  // `all` = catálogo COMPLETO daquele servidor: a contagem da linha ignora os filtros de texto e de
+  // gravação (senão o número dançaria enquanto o operador digita na busca).
+  const serverViews = servers.map((s) => {
+    const all = cameras.filter((c) => c.server_id === s.id);
+    return {
+      server: s,
+      all,
+      view: viewFor(groups.filter((g) => g.server_id === s.id), all, devices.filter((d) => d.server_id === s.id)),
+    };
+  });
   return (
     <>
       {/* "Cameras" section: the tree existed with no header at all (the Layouts one has its own).
@@ -511,11 +526,13 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
       <ul className="tree" onDragEnd={() => setHovered(null)} onDragOver={acceptDrag} onDrop={(e) => handleDrop(e, null)}>
         {servers.length === 0 && nodes.length === 0 && <EmptyState as="li" className="muted" message={t('cameras.empty')} />}
         {servers.length === 0 && nodes.map(renderNode)}
-        {serverViews.map(({ server, view }) => {
+        {serverViews.map(({ server, all, view }) => {
           // filtro ativo: servidor sem NENHUM match some (regra da pasta); sem filtro, servidor
           // vazio aparece — é estado real (spec 5.3)
           if (isFiltering && view.cameras.length === 0 && view.groups.length === 0) return null;
-          return renderServer(server, buildTree(view.groups, view.cameras, view.devices));
+          // ativas = estado online no catálogo completo; offline = 0 (nada acessível, protótipo v5)
+          const ativas = server.online ? all.filter((c) => c.state === 'online').length : 0;
+          return renderServer(server, buildTree(view.groups, view.cameras, view.devices), { ativas, total: all.length });
         })}
       </ul>
       {/* empty strip: dropping here raises camera(s) or folder to the root (target null) */}
