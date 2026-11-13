@@ -48,6 +48,9 @@ type Props = {
   // CTA "+" da linha do servidor (aceite 2026-11-12): abre o wizard de câmera daquele servidor.
   // O portão camera.manage.global é do App: sem o prop o botão NÃO existe (mesmo padrão do menu D6).
   onAddCamera?: (serverId: string) => void;
+  // Servidor offline (protótipo aprovado 2026-11-13): o ⋯ vira um botão de reconexão e chama este prop
+  // com a base. O fluxo é o mesmo do item "reconnect-server" do menu (modal com initialBase).
+  onReconnect?: (serverId: string) => void;
   // Nós raiz por servidor (spec 5.3). Sem o prop, a árvore desenha o plano de sempre — é o estado
   // de transição até o App passar a lista na Fase 4.
   servers?: ServerNode[];
@@ -73,7 +76,7 @@ const STATUS_KEYS = {
 // the visible range). The drag carries a CSV of ids per format in the dataTransfer.
 // The component only renders: whoever decides the actions talks to the server via onAction/onDrop.
 // Double click goes up through onOpen (the App takes the camera/folder to the wall).
-export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onConnectServer, onAddCamera, servers = [], filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
+export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onConnectServer, onAddCamera, onReconnect, servers = [], filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
   const { t } = useT();
   // ponytail: open by default — a new folder with the camera inside already shows open, with no
   // second click to find out where the camera went
@@ -357,13 +360,17 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
 
   // Linha do nó servidor (spec 5.3): ícone 🖥, rótulo, ⋯. O ponto de status online/offline foi
   // removido a pedido (2026-10-30); o campo `online` segue no ServerNode (menu/poll).
+  // Servidor offline (protótipo aprovado 2026-11-13): a linha ganha a classe `off-line` (cinza —
+  // CSS em styles.css), o sufixo "(Desconectado)" e o ⋯ é SUBSTITUÍDO pelo botão de reconexão;
+  // o CTA "+" some (não se adiciona câmera a um servidor morto). Menu completo segue no botão direito.
   // Sem drag do nó, sem drop no nó, sem palco: duplo-clique só expandre/recolhe.
   function renderServer(s: ServerNode, childNodes: TreeNode<Camera>[]) {
     const open = !closed.includes(s.id);
+    const off = !s.online;
     return (
       <li
         key={s.id}
-        className="tree-row tree-servidor"
+        className={`tree-row tree-servidor${off ? ' off-line' : ''}`}
         onDoubleClick={() => toggle(s.id)}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -386,10 +393,11 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
           </span>
           <span className="tree-icone" aria-hidden="true">🖥</span>
           <span className="tree-nome">{s.label}</span>
+          {off && <span className="tree-estado">{t('servers.offline_suffix')}</span>}
           {/* CTA verde aprovado no protótipo (v5 traço, 2026-11-12): "+" + câmera de vídeo em SVG com
               currentColor (verde no repouso, escuro no hover — o emoji não acompanha o CTA). Abre o
               wizard daquele servidor. Sempre visível (é CTA, não some no repouso como o ⋯). */}
-          {onAddCamera && (
+          {onAddCamera && !off && (
             <button
               type="button"
               className="cam-dots mini-cta cta-add-cam"
@@ -408,21 +416,40 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
               </svg>
             </button>
           )}
-          <button
-            type="button"
-            className="cam-dots"
-            aria-label={t('cameras.options', { name: s.label })}
-            title={t('cameras.options', { name: s.label })}
-            aria-haspopup="menu"
-            onDoubleClick={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              const r = e.currentTarget.getBoundingClientRect();
-              onAction({ type: 'menu-toggle', kind: 'server', id: s.id, x: r.right, y: r.bottom, name: s.label });
-            }}
-          >
-            ⋯
-          </button>
+          {off ? (
+            // offline: o ⋯ dá lugar ao ↻ (um clique = modal de reconexão na base, fluxo 3.4)
+            <button
+              type="button"
+              className="cam-dots cta-recon"
+              aria-label={t('servers.reconnect')}
+              title={t('servers.reconnect')}
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onReconnect?.(s.id); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                style={{ width: 14, height: 14, display: 'block' }}>
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="cam-dots"
+              aria-label={t('cameras.options', { name: s.label })}
+              title={t('cameras.options', { name: s.label })}
+              aria-haspopup="menu"
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                const r = e.currentTarget.getBoundingClientRect();
+                onAction({ type: 'menu-toggle', kind: 'server', id: s.id, x: r.right, y: r.bottom, name: s.label });
+              }}
+            >
+              ⋯
+            </button>
+          )}
         </span>
         {open && childNodes.length > 0 && <ul className="tree-filhos">{childNodes.map(renderNode)}</ul>}
       </li>

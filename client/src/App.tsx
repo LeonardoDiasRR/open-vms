@@ -542,11 +542,14 @@ export default function App() {
           onAction={openMenu}
           onDrop={onDrop}
           onOpen={openOnWall}
-          // spec 5.3: o App MESCLA o ok do poll no array que desce (useServers não conhece o poll)
-          servers={servers.map((s) => ({ id: s.id, label: s.label, online: connections.find((c) => c.serverId === s.id)?.ok ?? false }))}
+          // spec 5.3: o App MESCLA o ok do poll no array que desce (useServers não conhece o poll).
+          // offline visual = MESMA regra do menu (extraOffline): linha cinza + (Desconectado) + ↻.
+          servers={servers.map((s) => ({ id: s.id, label: s.label, online: !extraOffline(s.id) }))}
           onConnectServer={() => setConnectOpen(true)}
           // CTA "+" da linha do servidor (2026-11-12): MESMO portão do item de menu add-camera (D6)
           onAddCamera={can('camera.manage.global') ? (serverId) => setWizard(serverId) : undefined}
+          // botão ↻ da linha offline: mesmo fluxo do item reconnect-server do menu (spec 3.4)
+          onReconnect={(serverId) => { setReconnectBase(serverId); setConnectOpen(true); }}
           filter={filter}
           devices={devices}
           folderSignal={folderSignal}

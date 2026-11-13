@@ -494,7 +494,9 @@ describe('server roots', () => {
   it('with onAddCamera: each server row gets the green + BEFORE the dots, clicking it raises no menu', () => {
     const onAddCamera = vi.fn();
     const onAction = vi.fn();
-    const { container } = renderTree(<CameraTree {...props} onAddCamera={onAddCamera} onAction={onAction} />);
+    // dois servidores ONLINE: o "+" some na linha offline (regra nova — teste dedicado abaixo)
+    const bothOnline = servers.map((s) => ({ ...s, online: true }));
+    const { container } = renderTree(<CameraTree {...props} servers={bothOnline} onAddCamera={onAddCamera} onAction={onAction} />);
     // sem prop nao existia (teste de baixo); com prop, um botao por linha de servidor
     expect(container.querySelectorAll('.tree-servidor > .tree-cabeca .cta-add-cam')).toHaveLength(2);
     // posicao: o + vem ANTES do ⋯ na linha
@@ -510,6 +512,41 @@ describe('server roots', () => {
   it('without onAddCamera the row keeps only the dots (the gate lives in the App — D6)', () => {
     const { container } = renderTree(<CameraTree {...props} />);
     expect(container.querySelector('.cta-add-cam')).toBeNull();
+  });
+
+  // servidor offline (protótipo aprovado 2026-11-13): linha off-line + sufixo + ↻ no lugar do ⋯
+  it('offline row: off-line class, (Disconnected) suffix, no green +, ↻ replaces the dots', () => {
+    const { container } = renderTree(<CameraTree {...props} onAddCamera={() => {}} />);
+    const [on, off] = [...container.querySelectorAll('.tree-servidor')] as HTMLLIElement[];
+    expect(on.className).not.toContain('off-line');
+    expect(off.className).toContain('off-line');
+    expect(off.querySelector('.tree-estado')?.textContent).toBe('(Disconnected)');
+    expect(on.querySelector('.tree-estado')).toBeNull();
+    // o "+" nao existe na linha offline (existia na online)
+    expect(off.querySelector('.cta-add-cam')).toBeNull();
+    expect(on.querySelector('.cta-add-cam')).not.toBeNull();
+    // o ⋯ da linha offline foi SUBSTITUÍDO pelo ↻ (unico cam-dots da linha)
+    const dots = off.querySelectorAll('.tree-cabeca > .cam-dots');
+    expect(dots).toHaveLength(1);
+    expect(dots[0]).toHaveClass('cta-recon');
+    expect(dots[0].textContent).not.toBe('⋯');
+    expect(on.querySelector('.cta-recon')).toBeNull();
+  });
+
+  it('clicking the offline ↻ raises onReconnect with the base and no menu (fluxo 3.4)', () => {
+    const onAction = vi.fn();
+    const onReconnect = vi.fn();
+    const { container } = renderTree(<CameraTree {...props} onAction={onAction} onReconnect={onReconnect} />);
+    fireEvent.click(container.querySelector('.tree-servidor.off-line .cta-recon')!);
+    expect(onReconnect).toHaveBeenCalledWith('http://b');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('offline row still opens the full menu on right click', () => {
+    const onAction = vi.fn();
+    const { container } = renderTree(<CameraTree {...props} onAction={onAction} />);
+    fireEvent.contextMenu(container.querySelector('.tree-servidor.off-line')!);
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'menu', kind: 'server', id: 'http://b' }));
   });
 
   it('the server row is neither draggable nor a drop target (spec 5.3)', () => {
