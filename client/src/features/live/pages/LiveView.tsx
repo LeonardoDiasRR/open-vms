@@ -70,19 +70,32 @@ export default function LiveView({ api, apiFor, cameras, groups = [], layouts = 
     useCellSelection(liveSnapshot?.selection ?? NO_SELECTION);
   const [profilesByCamera, setProfilesByCamera] = useState<Record<string, Profile[]>>({}); // camera_id -> [profile]
 
+  // Servidores envolvidos: o primário + cada server_id distinto das câmeras. Profile é POR SERVIDOR:
+  // buscar só no primário deixava a câmera de servidor extra sem profile e, portanto, sem WHEP
+  // (bug 2026-11-13: o Pacaraima tocava com o PAC primário e ficava preto como extra do RR).
+  // ponytail: a chave é a lista de server_id distintos — câmera nova do MESMO servidor não refaz o
+  // fetch (o profile não muda a cada poll de 5 s), servidor novo refaz.
+  const serverIdKey = Array.from(new Set(cameras.map((c) => c.server_id ?? ''))).sort().join('|');
   useEffect(() => {
     let alive = true;
-    api.profiles()
-      .then((list: ProfileRow[]) => {
+    const alvos = serverIdKey.split('|').filter(Boolean).map((id) => apiFor?.(id) ?? api);
+    // mesmo ApiClient (ex.: apiFor sem extra cai no primário) responde uma vez só
+    const unicos = alvos.filter((a, i) => alvos.indexOf(a) === i);
+    Promise.allSettled((unicos.length ? unicos : [api]).map((a) => a.profiles()))
+      .then((res) => {
         if (!alive) return;
         const map: Record<string, Profile[]> = {};
-        for (const p of list) (map[p.camera_id] ||= []).push(p);
+        for (const r of res) {
+          // um servidor fora do ar não zera o mapa dos outros (câmeras dele ficam sem profile, como antes)
+          if (r.status !== 'fulfilled') continue;
+          for (const p of r.value as ProfileRow[]) (map[p.camera_id] ||= []).push(p);
+        }
         setProfilesByCamera(map);
       })
       // ponytail: failure becomes an empty map, it does not break the screen
       .catch(() => { if (alive) setProfilesByCamera({}); });
     return () => { alive = false; };
-  }, [api, cameras]);
+  }, [api, serverIdKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // spec 2026-10-17 (tab state) + spec 2026-10-18 (selection): the mark and the expansion survive a tab
   // switch and die on logout, because `clearLiveViewSnapshot()` is already called there and in the tests.
