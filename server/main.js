@@ -495,6 +495,7 @@ async function startServer(cfg = {}) {
   // events retention (config.yaml `events.retention_days`): an hourly prune, no other ceiling
   const eventsTimer = setInterval(() => {
     pruneEvents(store, config.events.retention_days).catch((e) => console.error('events prune: ' + e.message));
+    store.sessions.prune().catch((e) => console.error('sessions prune: ' + e.message));
   }, 3600e3);
   eventsTimer.unref();
 
