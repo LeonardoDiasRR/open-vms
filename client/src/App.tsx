@@ -61,6 +61,7 @@ export default function App() {
   const [marked, setMarked] = useState<Marked[]>([]); // multiple selection: {kind: 'camera'|'group'|'layout', id} pairs
   const [wizard, setWizard] = useState<string | null>(null); // base do servidor do wizard de câmera (D6)
   const [connectOpen, setConnectOpen] = useState(false);      // AddServerModal
+  const [reconnectBase, setReconnectBase] = useState<string | null>(null); // modal no fluxo "reconectar" (spec 2026-11-12, 3.4)
   const [menu, setMenu] = useState<Menu | null>(null);   // {kind, id, x, y, name}
   // side panels: state + persistence (the hook reads/writes openvms.panels). `widths` is the EXPLICIT
   // width from the drag (spec 2026-10-17, 1.2): absent = the CSS default.
@@ -100,7 +101,7 @@ export default function App() {
   const can: (cap: Capability) => boolean = session ? makeCan(session.capabilities) : () => false;
   // Registry (spec 5.1): o primário é o api da sessão; o boot-restore dos extras mora no hook e só
   // roda com sessão (sem primário não se monta extra — 5.1). reset = logout limpa extras e tokens.
-  const { servers, addServer, disconnectServer, renameServer, reset: resetServers, apiFor } =
+  const { servers, addServer, reconnectServer, disconnectServer, renameServer, reset: resetServers, apiFor } =
     useServers(session ? session.api : null);
   const { cameras, devices, groups, rtsp, rtspByServer, connection, connections, refresh: refreshCameras, reset: resetCameras, move } =
     useCameras(servers.length ? servers.map(({ id, api }) => ({ id, api })) : null);
@@ -228,6 +229,8 @@ export default function App() {
     if (id === 'rename-server') {
       const name = await dlg.ask(t('cameras.rename_prompt'), t('shared.name'), target.name);
       if (name && name !== target.name) renameServer(target.id, name); // alias local — nunca no backend
+    } else if (id === 'reconnect-server') {
+      setReconnectBase(target.id); setConnectOpen(true); // mesma modal, com a base no lugar da memoria
     } else if (id === 'disconnect-server') {
       const entry = servers.find((s) => s.id === target.id);
       const go = await dlg.confirm(t('servers.disconnect'),
@@ -435,9 +438,16 @@ export default function App() {
   // says whether the target is inside a folder — CameraTree does not choose the label, the menu does.
   // plan 2026-10-27 (5.1): the camera target carries `ativa` from the catalog (the menu label and the
   // toggle read it; the tolerant rule lives in cameraMenuItems — only false is inactive).
+  // spec 2026-11-12 (3.4): extra sem resposta do poll esta "offline" — o menu dele oferece Reconectar.
+  // Sem poll ainda nao respondido conta como online (o badge nao pisca no boot).
+  const extraOffline = (id: string): boolean => {
+    const e = servers.find((s) => s.id === id);
+    return !!e && !e.primary && !(connections.find((c) => c.serverId === id)?.ok ?? true);
+  };
+
   const menuItems = (m: Menu): ItemMenu[] => (
     m.kind === 'layout' ? layoutMenuItems(m, marked, { t }, can)
-      : m.kind === 'server' ? serverMenuItems(m, { t }, can)
+      : m.kind === 'server' ? serverMenuItems(m, { t }, can, { offline: extraOffline(m.id) })
       : cameraMenuItems({ ...m, ativa: cameras.find((c) => c.id === m.id)?.ativa }, marked, groupOf(m) != null, { t, tn }, can)
   );
 
@@ -630,7 +640,11 @@ export default function App() {
       )}
       {/* conecta servidor (spec 5.2): sem portão (D4); a lista de bases vivas fecha a duplicata */}
       {connectOpen && (
-        <AddServerModal existingBases={servers.map((s) => s.id)} onSubmit={addServer} onClose={() => setConnectOpen(false)} />
+        <AddServerModal
+          existingBases={servers.map((s) => s.id).filter((b) => b !== reconnectBase)}
+          initialBase={reconnectBase ?? undefined}
+          onSubmit={reconnectBase ? reconnectServer : addServer}
+          onClose={() => { setConnectOpen(false); setReconnectBase(null); }} />
       )}
 
       {config && (() => {
