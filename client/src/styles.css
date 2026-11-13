@@ -1093,7 +1093,10 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .cam-dots.mini-cta[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
 /* CTA "+" da linha do servidor (protótipo aprovado 2026-11-12, variante B): mesmo shape do
    mini-cta, cor de CTA sem hex novo — fundo do filtro ativo, borda/cor do acento. */
-.cam-dots.mini-cta.cta-add-cam { background: var(--active-bg); border-color: var(--accent); color: var(--accent); }
+.cam-dots.mini-cta.cta-add-cam { background: var(--active-bg); border-color: var(--accent); color: var(--accent);
+  /* o '+' em line-height:1 cai na baseline (ficava baixo no quadrado de 20px) — centraliza igual
+     ao filtro-gravacao (precedente da casa para icone dentro de botao quadrado) */
+  display: flex; align-items: center; justify-content: center; }
 .cam-dots.mini-cta.cta-add-cam:hover { background: var(--accent); color: var(--scene); }
 /* a bolinha de 7px (badge) precisa de flex para ser centralizada dentro do botao (span inline nao e flex-item aqui) */
 .tree-secao .filtro-gravacao { display: flex; align-items: center; justify-content: center; }
