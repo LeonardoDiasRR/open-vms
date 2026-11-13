@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useT } from '@/shared/i18n';
 import { InputSenha } from '@/shared/ui/input-senha';
-import { MODAL_MEMORY, buildBase, readLastConnection, saveLastConnection } from '@/shared/utils/server-fields';
+import { MODAL_MEMORY, buildBase, readLastConnection, saveLastConnection, splitServerValue } from '@/shared/utils/server-fields';
 
 // Modal "Connect server" (spec 2026-10-30, 5.2): campos IP/porta/usuário/senha, base
 // {scheme}://{ip}:{porta} com o scheme da página. O LOGIN é do chamador (App -> useServers.addServer),
@@ -9,14 +9,17 @@ import { MODAL_MEMORY, buildBase, readLastConnection, saveLastConnection } from 
 // Sem portão de capacidade: qualquer logado conecta (D4).
 type Props = {
   existingBases: string[];
+  // spec 2026-11-12 (extras-persistentes 3.4): o fluxo "reconectar" prefills desta base;
+  // ausente = memoria da modal como sempre.
+  initialBase?: string;
   onSubmit: (base: string, user: string, password: string) => Promise<string | null>;
   onClose: () => void;
 };
 
-export default function AddServerModal({ existingBases, onSubmit, onClose }: Props) {
+export default function AddServerModal({ existingBases, initialBase, onSubmit, onClose }: Props) {
   const { t } = useT();
   // spec 2026-10-30 (memoria-conexao-independente): prefill pela ultima conexao da MODAL; sem memoria, a pagina.
-  const [last] = useState(() => readLastConnection(MODAL_MEMORY));
+  const [last] = useState(() => (initialBase ? splitServerValue(initialBase) : readLastConnection(MODAL_MEMORY)));
   const [ip, setIp] = useState(last.host);
   const [port, setPort] = useState(last.port);
   const [user, setUser] = useState('');
