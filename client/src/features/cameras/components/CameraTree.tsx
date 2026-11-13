@@ -386,7 +386,8 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
           </span>
           <span className="tree-icone" aria-hidden="true">🖥</span>
           <span className="tree-nome">{s.label}</span>
-          {/* CTA verde aprovado no protótipo (2026-11-12): mesmo shape do mini-cta do cabeçalho, abre o
+          {/* CTA verde aprovado no protótipo (v5 traço, 2026-11-12): "+" + câmera de vídeo em SVG com
+              currentColor (verde no repouso, escuro no hover — o emoji não acompanha o CTA). Abre o
               wizard daquele servidor. Sempre visível (é CTA, não some no repouso como o ⋯). */}
           {onAddCamera && (
             <button
@@ -398,7 +399,13 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
               onDoubleClick={(e) => e.stopPropagation()}
               onClick={(e) => { e.stopPropagation(); onAddCamera(s.id); }}
             >
-              +
+              <span aria-hidden="true">+</span>
+              {/* forma aprovada (imagem do usuário): retângulo arredondado + trapezóide lateral */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2" y="6" width="14" height="12" rx="2.2" />
+                <path d="m22 8-6 4 6 4V8Z" />
+              </svg>
             </button>
           )}
           <button
