@@ -280,6 +280,13 @@ describe('useCameras multi-server', () => {
 describe('serverMenuItems', () => {
   const items = (can?: (c: Capability) => boolean) => serverMenuItems({ kind: 'server', id: 'http://a' }, labels(), can);
 
+  it('extra offline abre com Reconectar no topo; online/ausente nunca mostra o item (spec 2026-11-12)', () => {
+    const offline = serverMenuItems({ kind: 'server', id: 'http://a' }, labels(), undefined, { offline: true });
+    expect(offline[0].id).toBe('reconnect-server');
+    expect(offline.map((i) => i.id)).toContain('disconnect-server'); // os dois de sempre continuam
+    expect(items().some((i) => i.id === 'reconnect-server')).toBe(false);
+  });
+
   it('rename, disconnect (danger only) and add-camera with the global cap (spec 5.4)', () => {
     const L = labels();
     expect(items(() => true).map((i) => i.id)).toEqual(['rename-server', 'disconnect-server', 'add-camera']);
