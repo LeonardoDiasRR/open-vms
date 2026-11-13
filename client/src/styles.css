@@ -1112,14 +1112,22 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .tree-servidor .badge { margin-left: 6px; flex: none; }
 .tree-servidor .tree-nome { font-weight: 600; }
 /* servidor offline (protótipo aprovado 2026-11-13): mesmo cinza da câmera inativa/desconectada.
-   O sufixo "(Desconectado)" fica colado no nome; as filhas herdam o cinza (nada é acessível). */
-.tree-estado { color: var(--muted); font-weight: 400; margin-left: 2px; flex: none; }
+   O sufixo "(Desconectado)" fica EMPURRADO À DIREITA, colado no ↻ (protótipo v5); as filhas herdam
+   o cinza (nada é acessível). O ↻ usa margin-left fixo para não dividir o vazio com o auto do estado. */
+.tree-estado { color: var(--muted); font-weight: 400; margin-left: auto; flex: none; }
 .tree-servidor.off-line > .tree-cabeca { opacity: 0.75; }
 .tree-servidor.off-line > .tree-cabeca .tree-icone { opacity: 0.4; }
 .tree-servidor.off-line > .tree-cabeca .tree-nome { color: var(--muted); }
-.tree-servidor.off-line > .tree-cabeca .cta-recon { opacity: 0.85; }
+.tree-servidor.off-line > .tree-cabeca .cta-recon { opacity: 0.85; margin-left: 6px; }
 .tree-servidor.off-line > .tree-cabeca .cta-recon:hover { opacity: 1; background: var(--hovered-row); }
 .tree-servidor.off-line .tree-filhos .tree-nome { color: var(--muted); }
+/* contagem (ativas/total) na linha do servidor (protótipo v5 aprovado 2026-11-13): o número mora
+   DENTRO do mesmo item do nome, então nenhum auto-margem do "⋯"/"+" pode empurrá-lo para a direita.
+   O nome trunca antes dele (min-width:0 no texto); o gap de 4px equivale a um espaço na fonte. */
+.tree-servidor > .tree-cabeca { min-width: 0; }
+.tree-servidor > .tree-cabeca .tree-nome { display: flex; align-items: baseline; min-width: 0; flex: 1 1 0; }
+.tree-nome-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tree-contagem { color: var(--muted); font-weight: 400; margin-left: 4px; flex: none; }
 /* Campo de filtro (spec 2026-10-17, secao 4.1). O visual base JA VEM da regra `input` do arquivo
    (linha ~90: fundo --input, borda --border, raio 3px, texto --text, `font: inherit`, `width: 100%`):
    aqui e so a GEOMETRIA dentro da secao e o marcador. Repetir borda/fundo aqui seria a mesma regra
