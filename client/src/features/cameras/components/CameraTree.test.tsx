@@ -490,6 +490,28 @@ describe('server roots', () => {
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'menu-toggle', kind: 'server', id: 'http://a' }));
   });
 
+  // CTA "+" da linha do servidor (protótipo aprovado 2026-11-12, variante B)
+  it('with onAddCamera: each server row gets the green + BEFORE the dots, clicking it raises no menu', () => {
+    const onAddCamera = vi.fn();
+    const onAction = vi.fn();
+    const { container } = renderTree(<CameraTree {...props} onAddCamera={onAddCamera} onAction={onAction} />);
+    // sem prop nao existia (teste de baixo); com prop, um botao por linha de servidor
+    expect(container.querySelectorAll('.tree-servidor > .tree-cabeca .cta-add-cam')).toHaveLength(2);
+    // posicao: o + vem ANTES do ⋯ na linha
+    const dots = container.querySelectorAll('.tree-servidor')[0].querySelectorAll('.tree-cabeca > .cam-dots');
+    expect(dots[0]).toHaveClass('cta-add-cam');
+    expect(dots[1].textContent).toBe('⋯');
+    // o clique leva o id da base (mesmo alvo do item add-camera do menu) e nao abre menu nem linha
+    fireEvent.click(dots[0]);
+    expect(onAddCamera).toHaveBeenCalledWith('http://a');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('without onAddCamera the row keeps only the dots (the gate lives in the App — D6)', () => {
+    const { container } = renderTree(<CameraTree {...props} />);
+    expect(container.querySelector('.cta-add-cam')).toBeNull();
+  });
+
   it('the server row is neither draggable nor a drop target (spec 5.3)', () => {
     const { container } = renderTree(<CameraTree {...props} />);
     const row = container.querySelectorAll('.tree-servidor')[0];

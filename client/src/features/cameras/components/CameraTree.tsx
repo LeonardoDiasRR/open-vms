@@ -45,6 +45,9 @@ type Props = {
   // spec 2026-10-30: o "+" da seção CONECTA SERVIDOR (sem portão — D4); o antigo onAdd (wizard)
   // migrou para o menu de contexto do nó servidor (D6).
   onConnectServer?: () => void;
+  // CTA "+" da linha do servidor (aceite 2026-11-12): abre o wizard de câmera daquele servidor.
+  // O portão camera.manage.global é do App: sem o prop o botão NÃO existe (mesmo padrão do menu D6).
+  onAddCamera?: (serverId: string) => void;
   // Nós raiz por servidor (spec 5.3). Sem o prop, a árvore desenha o plano de sempre — é o estado
   // de transição até o App passar a lista na Fase 4.
   servers?: ServerNode[];
@@ -70,7 +73,7 @@ const STATUS_KEYS = {
 // the visible range). The drag carries a CSV of ids per format in the dataTransfer.
 // The component only renders: whoever decides the actions talks to the server via onAction/onDrop.
 // Double click goes up through onOpen (the App takes the camera/folder to the wall).
-export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onConnectServer, servers = [], filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
+export default function CameraTree({ groups, cameras, devices = [], selected, marked = [], onSelect, onMark = () => {}, onAction, onDrop, onOpen = () => {}, onConnectServer, onAddCamera, servers = [], filter = '', folderSignal, onToggleFolders, recordingFilter = null, onCycleRecording }: Props) {
   const { t } = useT();
   // ponytail: open by default — a new folder with the camera inside already shows open, with no
   // second click to find out where the camera went
@@ -383,6 +386,21 @@ export default function CameraTree({ groups, cameras, devices = [], selected, ma
           </span>
           <span className="tree-icone" aria-hidden="true">🖥</span>
           <span className="tree-nome">{s.label}</span>
+          {/* CTA verde aprovado no protótipo (2026-11-12): mesmo shape do mini-cta do cabeçalho, abre o
+              wizard daquele servidor. Sempre visível (é CTA, não some no repouso como o ⋯). */}
+          {onAddCamera && (
+            <button
+              type="button"
+              className="cam-dots mini-cta cta-add-cam"
+              title={t('servers.add_camera')}
+              aria-label={t('servers.add_camera')}
+              // o + é da linha: sem stopPropagation vira dblclick/seleção da linha do servidor
+              onDoubleClick={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); onAddCamera(s.id); }}
+            >
+              +
+            </button>
+          )}
           <button
             type="button"
             className="cam-dots"

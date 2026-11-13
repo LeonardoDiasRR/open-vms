@@ -535,6 +535,8 @@ export default function App() {
           // spec 5.3: o App MESCLA o ok do poll no array que desce (useServers não conhece o poll)
           servers={servers.map((s) => ({ id: s.id, label: s.label, online: connections.find((c) => c.serverId === s.id)?.ok ?? false }))}
           onConnectServer={() => setConnectOpen(true)}
+          // CTA "+" da linha do servidor (2026-11-12): MESMO portão do item de menu add-camera (D6)
+          onAddCamera={can('camera.manage.global') ? (serverId) => setWizard(serverId) : undefined}
           filter={filter}
           devices={devices}
           folderSignal={folderSignal}
