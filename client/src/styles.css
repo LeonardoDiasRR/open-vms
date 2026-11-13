@@ -1111,6 +1111,15 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .tree li.tree-servidor { font-weight: 500; flex-wrap: wrap; padding: 0; }  /* .tree-cabeca e .tree-filhos têm flex-basis:100% — sem wrap eles ficam lado a lado */
 .tree-servidor .badge { margin-left: 6px; flex: none; }
 .tree-servidor .tree-nome { font-weight: 600; }
+/* servidor offline (protótipo aprovado 2026-11-13): mesmo cinza da câmera inativa/desconectada.
+   O sufixo "(Desconectado)" fica colado no nome; as filhas herdam o cinza (nada é acessível). */
+.tree-estado { color: var(--muted); font-weight: 400; margin-left: 2px; flex: none; }
+.tree-servidor.off-line > .tree-cabeca { opacity: 0.75; }
+.tree-servidor.off-line > .tree-cabeca .tree-icone { opacity: 0.4; }
+.tree-servidor.off-line > .tree-cabeca .tree-nome { color: var(--muted); }
+.tree-servidor.off-line > .tree-cabeca .cta-recon { opacity: 0.85; }
+.tree-servidor.off-line > .tree-cabeca .cta-recon:hover { opacity: 1; background: var(--hovered-row); }
+.tree-servidor.off-line .tree-filhos .tree-nome { color: var(--muted); }
 /* Campo de filtro (spec 2026-10-17, secao 4.1). O visual base JA VEM da regra `input` do arquivo
    (linha ~90: fundo --input, borda --border, raio 3px, texto --text, `font: inherit`, `width: 100%`):
    aqui e so a GEOMETRIA dentro da secao e o marcador. Repetir borda/fundo aqui seria a mesma regra
