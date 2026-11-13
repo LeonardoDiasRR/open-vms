@@ -196,6 +196,7 @@ export const en = {
   'servers.add': 'Connect server',
   'servers.rename': 'Rename server',
   'servers.disconnect': 'Disconnect server',
+  'servers.reconnect': 'Reconnect server',
   'servers.add_camera': 'Add camera',
   'servers.connect_title': 'Connect OpenVMS server',
   'servers.ip': 'IP',
