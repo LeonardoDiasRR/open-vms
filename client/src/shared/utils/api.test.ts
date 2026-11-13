@@ -490,6 +490,6 @@ test('signOut invalidates the session on the server (spec 2026-11-12)', async ()
     await api.login('admin', 'pw-so');
     await api.me();
     await api.signOut();
-    await assert.rejects(api.me(), (e) => statusOf(e) === 401);
+    await assert.rejects(api.me(), (e: unknown) => statusOf(e) === 401);
   } finally { srv.close(); }
 });
