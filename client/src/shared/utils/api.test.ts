@@ -481,3 +481,15 @@ it('accessProfileGrants hits the profile grants route', async () => {
   expect(calls).toEqual([{ method: 'GET', url: '/api/v1/profiles/access/p%201/grants' }]);
   expect(grants).toEqual([{ camera_id: 'c1', level: 'view' }]);
 });
+
+test('signOut invalidates the session on the server (spec 2026-11-12)', async () => {
+  const srv = await startServer({ port: 0, dataDir: mkdtempSync(join(tmpdir(), 'ovms-signout-')), adminUser: 'admin', adminPassword: 'pw-so' });
+  withoutPendingChange(srv, 'admin');
+  try {
+    const api = new ApiClient(`http://127.0.0.1:${srv.port}`);
+    await api.login('admin', 'pw-so');
+    await api.me();
+    await api.signOut();
+    await assert.rejects(api.me(), (e: unknown) => statusOf(e) === 401);
+  } finally { srv.close(); }
+});

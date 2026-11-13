@@ -197,6 +197,7 @@ export const ptBR: Record<MessageKey, string> = {
   'servers.add': 'Conectar servidor',
   'servers.rename': 'Renomear servidor',
   'servers.disconnect': 'Desconectar servidor',
+  'servers.reconnect': 'Reconectar servidor',
   'servers.add_camera': 'Adicionar câmera',
   'servers.connect_title': 'Conectar servidor OpenVMS',
   'servers.ip': 'IP',

@@ -122,3 +122,26 @@ describe('AddServerModal (plan 2026-10-30)', () => {
     expect(localStorage.getItem('openvms.portModal')).toBeNull();
   });
 });
+
+// spec 2026-11-12 (3.4): o prefill do fluxo "reconectar" vem da base; o fluxo "adicionar" conserva
+// a memoria da modal. Render test (RTL) — os inputs sao filhos dos <label> existentes.
+const renderModal = (props: { existingBases: string[]; initialBase?: string }) =>
+  render(createElement(LanguageProvider, null,
+    createElement(AddServerModal, { onSubmit: async () => null, onClose: () => {}, ...props })));
+
+describe('AddServerModal initialBase (spec 2026-11-12)', () => {
+  it('prefills IP and port from initialBase', () => {
+    renderModal({ existingBases: [], initialBase: 'http://10.0.0.9:7102' });
+    expect(screen.getByDisplayValue('10.0.0.9')).toBeTruthy();
+    expect(screen.getByDisplayValue('7102')).toBeTruthy();
+  });
+
+  it('without initialBase falls back to the modal memory', () => {
+    localStorage.setItem('openvms.serverModal', '10.0.0.1');
+    localStorage.setItem('openvms.portModal', '7101');
+    renderModal({ existingBases: [] });
+    expect(screen.getByDisplayValue('10.0.0.1')).toBeTruthy();
+    expect(screen.getByDisplayValue('7101')).toBeTruthy();
+    localStorage.clear();
+  });
+});

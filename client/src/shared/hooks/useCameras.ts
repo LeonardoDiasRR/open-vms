@@ -242,12 +242,15 @@ export function cameraMenuItems(m: MenuTarget, marked: MenuTarget[], inGroup = f
 // Menu do nó servidor (spec 5.4): Rename e Disconnect SEMPRE (Disconnect é o único danger);
 // "Add camera" entra só com camera.manage.global (D6) — o MESMO padrão de `can` opcional de
 // cameraMenuItems: ausente = tudo aberto (o chamador que esquecer o gate degrada, nunca esvazia).
-export function serverMenuItems(m: MenuTarget, { t }: Pick<Translate, 't'>, can?: (cap: Capability) => boolean): ItemMenu[] {
+export function serverMenuItems(m: MenuTarget, { t }: Pick<Translate, 't'>, can?: (cap: Capability) => boolean, opts?: { offline?: boolean }): ItemMenu[] {
   const allow = (cap: Capability) => !can || can(cap);
-  const items: ItemMenu[] = [
-    { id: 'rename-server', label: t('servers.rename') },
-    { id: 'disconnect-server', label: t('servers.disconnect'), danger: true },
-  ];
+  // spec 2026-11-12 (extras-persistentes 3.4): extra OFFLINE abre com Reconectar no topo. Quem
+  // calcula `offline` e o App (extra && poll sem resposta); o builder so desenha — o primario
+  // nunca chega aqui offline.
+  const items: ItemMenu[] = [];
+  if (opts?.offline) items.push({ id: 'reconnect-server', label: t('servers.reconnect') });
+  items.push({ id: 'rename-server', label: t('servers.rename') },
+    { id: 'disconnect-server', label: t('servers.disconnect'), danger: true });
   if (allow('camera.manage.global')) items.push({ id: 'add-camera', label: t('servers.add_camera') });
   void m; // o alvo do menu de servidor é sempre um servidor; a assinatura só alinha com os outros builders
   return items;

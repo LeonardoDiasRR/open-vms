@@ -247,6 +247,13 @@ export class ApiClient {
   // ponytail: the session is just the token in memory; real expiry happens on the server
   logout() { this.token = null; this.camerasEtag = null; this.camerasCache = null; }
 
+  // spec 2026-11-12 (extras-persistentes 3.5): REMOTE logout — mata a sessao no servidor e depois
+  // limpa o local. Falha de rede nunca impede a limpeza local (sessao inalcancavel morreria no TTL anyway).
+  async signOut() {
+    try { await this.req('POST', '/api/v1/auth/logout'); } catch { /* inalcancavel: limpa local mesmo assim */ }
+    this.logout();
+  }
+
 
   // F4 (spec §10): the own-session routes and administration. The names follow the file convention
   // (`req` is thin); `accessProfiles` carries "access" so it does not collide with `profiles()`,
