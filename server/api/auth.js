@@ -8,8 +8,8 @@ const { capabilitiesOf } = require('../lib/rbac');
 // the bootstrap live here. The session is stored by the token HASH key (sha256), never by the plain
 // token: a leaked table hands over no live session, and no secret comparison is left to protect
 // against timing (looking up a digest is not comparing the token — E6).
-const SESSION_TTL_MS = Number(process.env.OPENVMS_SESSION_TTL_MS) || 6 * 3600e3;   // ABSOLUTE expiry
-const SESSION_IDLE_MS = Number(process.env.OPENVMS_SESSION_IDLE_MS) || 30 * 60e3;  // by IDLENESS
+const SESSION_TTL_MS = Number(process.env.OPENVMS_SESSION_TTL_MS) || 90 * 24 * 3600e3;  // ABSOLUTE expiry
+const SESSION_IDLE_MS = Number(process.env.OPENVMS_SESSION_IDLE_MS) || 48 * 3600e3;     // by IDLENESS
 const LAST_SEEN_MIN_MS = 60e3;   // ponytail: the touch is one UPDATE, throttled to once a minute
 
 // 2026-10-26 (operator): a fresh install is born with the FIXED credential admin/admin and the change is
