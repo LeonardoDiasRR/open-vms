@@ -34,6 +34,7 @@ const ERRORS = {
   device_address_required: { status: 400, message: 'Device has no address' },
   camera_onvif_address_required: { status: 400, message: 'Camera has no ONVIF address' },
   device_onvif_address_required: { status: 400, message: 'Device has no ONVIF address' },
+  camera_credential_refused: { status: 400, message: 'The camera refused these credentials' },
   camera_credentials_required: { status: 400, message: 'Camera has no credentials' },
   device_credentials_required: { status: 400, message: 'Device has no credentials' },
   classify_credentials_required: { status: 400, message: 'Credentials are required for classification' },
