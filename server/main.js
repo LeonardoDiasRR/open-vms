@@ -59,6 +59,7 @@ const { withCredential: withCredential, withoutCredential: withoutCredential } =
 const { cameraRoles: cameraRoles } = require('./lib/roles');
 const { hubUrl, hubApiUrl, ensureCredential: ensureCredential } = require('./lib/hub');
 const { publishCamera: publishCamera, removeCamera, reconcile } = require('./lib/publicacao');
+const { probeRtspAuth } = require('./lib/camera-gate');
 const { restreamRoutes } = require('./api/restream');
 const { createStateWatcher: createStateWatcher } = require('./lib/state-hub');
 const { repairPort } = require('./lib/reparo-porta');
@@ -693,6 +694,47 @@ async function startServer(cfg = {}) {
     return cam;
   };
 
+  // spec 2026-11-17 (editar credenciais): sonda → grava → prime → reinicia a fonte do Hub.
+  // A validação de corpo vem ANTES da sonda (teste: corpo inválido não queima tentativa na câmera).
+  // Só 'refused' bloqueia a escrita: 'unknown' (câmera fora do ar/inalcançável) nunca bloqueia — é o
+  // caso de uso principal do operador (BV004, medido 2026-11-17). 'ok'/'412'/'501' provam a credencial.
+  const postCameraCredentials = devices['POST /api/v1/cameras/:id/credentials'];
+  handlers['POST /api/v1/cameras/:id/credentials'] = async (body = {}) => {
+    const { username, password } = body;
+    if (typeof username !== 'string' || !username) throw new AppError('field_invalid', { field: 'username' });
+    if (typeof password !== 'string' || !password) throw new AppError('field_invalid', { field: 'password' });
+    const row = await store.catalog.cameras.get(body.id);
+    if (!row) throw new AppError('camera_not_found');
+    const addr = (await store.catalog.cameras.addresses(body.id))[0] || null;
+    const ip = addr && addr.ip ? addr.ip : null;
+    if (ip) {
+      // sonda no caminho do perfil primário quando ele aponta o IP sondado (mesma regra do
+      // channelUrlFor do gate); sem isso a raiz decide (probeRtspAuth com url=null).
+      const { primary } = await rolesOf(row);
+      let url = null;
+      if (primary && primary.source_url) {
+        try {
+          const u = new URL(primary.source_url);
+          if (u.hostname === ip && (Number(u.port) || 554) === (Number(addr.port) || 554)) url = primary.source_url;
+        } catch { /* source não é URL: sonda a raiz */ }
+      }
+      const verdict = await (conf.credentialProbe || probeRtspAuth)(ip, Number(addr.port) || 554, username, password, 5000, url);
+      if (verdict === 'refused') throw new AppError('camera_credential_refused');
+    }
+    const saved = await postCameraCredentials({ id: body.id, username, password }); // E6: row flat achatado
+    await primeCredentials(); // o mapa quente precede qualquer republish (mesma ordem do add)
+    let restarted = false;
+    if (conf.rtsp === true && saved.ativa !== false) { // flat trouxe meta.ativa para o topo (linha 14 do devices.js)
+      // remove→publish: o único reinício forçado de fonte em execução já usado em produção (mesma
+      // sequência do desativar câmera acima). O remove falho não impede o publish (replace é UPSERT).
+      await removeCamera(hubApi, body.id).catch(() => {});
+      await publishCamera(hubApi, { store, deps, conf, cam: saved })
+        .catch((e) => console.error('hub: republish after credentials failed: ' + e.message));
+      restarted = true;
+    }
+    return { ok: true, restarted };
+  };
+
   const send = (res, status, obj) => {
     const body = JSON.stringify(obj);
     res.writeHead(status, { 'content-type': 'application/json' });
@@ -877,6 +919,8 @@ async function startServer(cfg = {}) {
     { method: 'POST', re: /^\/api\/v1\/cameras\/([^/]+)\/onvif-refresh$/, key: 'POST /api/v1/cameras/:id/onvif-refresh',
       params: (m) => ({ id: decodeURIComponent(m[1]) }) },
     { method: 'POST', re: /^\/api\/v1\/cameras\/([^/]+)\/manufacturer$/, key: 'POST /api/v1/cameras/:id/manufacturer',
+      params: (m) => ({ id: decodeURIComponent(m[1]) }) },
+    { method: 'POST', re: /^\/api\/v1\/cameras\/([^/]+)\/credentials$/, key: 'POST /api/v1/cameras/:id/credentials',
       params: (m) => ({ id: decodeURIComponent(m[1]) }) },
     { method: 'GET', re: /^\/api\/v1\/cameras\/([^/]+)\/ptz$/, key: 'GET /api/v1/cameras/:id/ptz',
       params: (m) => ({ id: decodeURIComponent(m[1]) }) },
