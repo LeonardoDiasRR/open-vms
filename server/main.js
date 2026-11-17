@@ -729,8 +729,8 @@ async function startServer(cfg = {}) {
       // sequência do desativar câmera acima). O remove falho não impede o publish (replace é UPSERT).
       await removeCamera(hubApi, body.id).catch(() => {});
       await publishCamera(hubApi, { store, deps, conf, cam: saved })
+        .then(() => { restarted = true; }) // E7: só quando o Hub aceitou (spec §3.2.4: Hub fora do ar → 200 restarted:false)
         .catch((e) => console.error('hub: republish after credentials failed: ' + e.message));
-      restarted = true;
     }
     return { ok: true, restarted };
   };
