@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ManufacturerModal from '../components/ManufacturerModal';
+import CredentialsModal from './CredentialsModal';
 import { useEsc } from '@/shared/hooks/useEsc';
 import type { PromptHandle } from '@/shared/components/PromptDialog';
 import { useModalFocus } from '@/shared/hooks/useFocoModal';
@@ -33,6 +34,7 @@ type Config = {
   addresses?: { ip: string }[];
   rtsp?: { primary?: string; secondary?: string };
   profiles?: Profile[];
+  credential?: { username: string | null } | null; // spec editar-credenciais: username só, nunca senha
 };
 
 // spec 2026-10-26 (save button): the manufacturer the operator picked/probed but did NOT save yet.
@@ -47,6 +49,7 @@ type Api = {
   cameraBrands(): Promise<{ name: string }[]>;
   setCameraManufacturer(id: string, name: string): Promise<Config>;
   setCameraOptions(id: string, body: { recording?: boolean; recording_mode?: RecordingMode; motion_sensitivity?: number; ativa?: boolean }): Promise<Config>;
+  setCameraCredentials(id: string, body: { username: string; password: string }): Promise<{ ok: boolean; restarted: boolean }>;
 };
 
 type Props = {
@@ -88,6 +91,7 @@ export default function CameraSettingsModal({ api, dlg, camera, onClose, reStrea
   const [saving, setSaving] = useState(false);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [manufacturerOpen, setManufacturerOpen] = useState(false);
+  const [credentialsOpen, setCredentialsOpen] = useState(false); // spec 2026-11-17 (editar credenciais)
   const [copied, setCopied] = useState<string | null>(null); // 'uuid' | 're-streaming' | null
 
   useEffect(() => {
@@ -215,6 +219,7 @@ export default function CameraSettingsModal({ api, dlg, camera, onClose, reStrea
     ['Firmware', configValue(onvif && onvif.firmware)],
     ['State', view ? view.state : DASH],
     [t('cameras.settings.ip_address'), view && view.addresses && view.addresses[0] ? view.addresses[0].ip : DASH],
+    [t('cameras.settings.rtsp_user'), configValue(view && view.credential && view.credential.username)],
     ['MAC', configValue(onvif && onvif.mac)],
     [t('cameras.settings.rtsp_primary'), configValue(view && view.rtsp && view.rtsp.primary)],
     [t('cameras.settings.rtsp_secondary'), configValue(view && view.rtsp && view.rtsp.secondary)],
@@ -279,7 +284,10 @@ export default function CameraSettingsModal({ api, dlg, camera, onClose, reStrea
                   onChange={(e) => setRecording(e.target.checked)} />
                 <span>{recording ? t('cameras.settings.recording_on') : t('cameras.settings.recording_off')}</span>
               </label>
-              <button className="nx-btn spacer-left" disabled={searching} onClick={reportManufacturer}>
+              <button className="nx-btn spacer-left" disabled={!canEdit} onClick={() => setCredentialsOpen(true)}>
+                {t('cameras.settings.edit_credentials')}
+              </button>
+              <button className="nx-btn" disabled={searching} onClick={reportManufacturer}>
                 {searching ? t('cameras.settings.searching') : t('cameras.settings.report_manufacturer')}
               </button>
             </div>
@@ -335,6 +343,13 @@ export default function CameraSettingsModal({ api, dlg, camera, onClose, reStrea
         <ManufacturerModal api={api} camera={camera}
           onClose={() => setManufacturerOpen(false)}
           onSelect={(name) => { setPending({ source: 'manual', name }); setProbeView(null); setManufacturerOpen(false); }} />
+      )}
+      {credentialsOpen && config && (
+        <CredentialsModal
+          cameraName={camera.name}
+          currentUser={config.credential ? config.credential.username : null}
+          onSave={(username, password) => api.setCameraCredentials(camera.id, { username, password })}
+          onClose={() => setCredentialsOpen(false)} />
       )}
     </div>
   );

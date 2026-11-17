@@ -493,3 +493,63 @@ test('signOut invalidates the session on the server (spec 2026-11-12)', async ()
     await assert.rejects(api.me(), (e: unknown) => statusOf(e) === 401);
   } finally { srv.close(); }
 });
+
+// spec 2026-11-17 (editar credenciais): a seam conf.credentialProbe troca o DESCRIBE autenticado real
+// (probeRtspAuth) pela decisão do teste. Um único teste cobre corpo inválido, recusa, gravação, câmera
+// sem credencial e 404 — cada asserção nomeia o que afirma.
+test('POST /cameras/:id/credentials: probe before save; refused keeps the vault untouched', async () => {
+  const probes: Array<{ ip: string; user: string; pass: string; url: string | null }> = [];
+  const srv = await startServer({
+    port: 0, dataDir: mkdtempSync(join(tmpdir(), 'ovms-cred-')), adminUser: 'admin', adminPassword: 'pw-cred',
+    rtsp: false, // regra da suíte: nunca publicar caminho de teste no Hub real
+    credentialProbe: async (ip: string, _port: number, user: string, pass: string, _t: number, url: string | null) => {
+      probes.push({ ip, user, pass, url });
+      return pass === 'senha-errada' ? 'refused' : pass === 'camera-fora-do-ar' ? 'unknown' : 'ok';
+    },
+  });
+  withoutPendingChange(srv, 'admin');
+  try {
+    const api = new ApiClient(`http://127.0.0.1:${srv.port}`);
+    await api.login('admin', 'pw-cred');
+    const cam = await api.addCamera({
+      name: 'CRED', addresses: [{ ip: '127.0.0.1', port: 554, scheme: 'rtsp' }],
+      source: 'rtsp://127.0.0.1:554/Streaming/Channels/101',
+      credential: { username: 'u1', password: 'p1' },
+    });
+    // corpo inválido: 400 ANTES de sondar (a sonda é ação de rede; corpo lixo não queima tentativa)
+    const probesBefore = probes.length;
+    await assert.rejects(api.setCameraCredentials(cam.id, { username: 'u2', password: '' }), (e: unknown) => statusOf(e) === 400);
+    assert.equal(probes.length, probesBefore, 'senha vazia não sonda a câmera');
+    // recusa: 400 e o cofre não muda (a leitura ainda mostra o username antigo)
+    await assert.rejects(api.setCameraCredentials(cam.id, { username: 'u2', password: 'senha-errada' }), (e: unknown) => statusOf(e) === 400);
+    assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u1');
+    // 'unknown' (câmera fora do ar) NÃO bloqueia a escrita — caso BV004 (spec §3.2.2, emendas E7/E8).
+    // A mutação `verdict !== 'ok'` morre no 400; a mutação "200 mas não gravou" morre na leitura de 'u3'.
+    await api.setCameraCredentials(cam.id, { username: 'u3', password: 'camera-fora-do-ar' });
+    assert.equal(probes[probes.length - 1].pass, 'camera-fora-do-ar');
+    assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u3');
+    // ok: grava, lê de volta; rtsp:false prova que restart é decisionado pelo conf, não pela rota
+    assert.deepEqual(await api.setCameraCredentials(cam.id, { username: 'u2', password: 'p2' }), { ok: true, restarted: false });
+    assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u2');
+    // a sonda recebeu o IP da endereço e a URL do canal primário (regra channelUrlFor do gate)
+    const last = probes[probes.length - 1];
+    assert.equal(last.ip, '127.0.0.1');
+    assert.equal(last.url, 'rtsp://127.0.0.1:554/Streaming/Channels/101');
+    assert.equal(last.pass, 'p2'); // E7/S3: a sonda recebeu exatamente a senha que foi escrita (não o username, não lixo)
+    // câmera sem credencial: a rota cria o ref e vincula (config passa a mostrar o username)
+    const sem = await api.addCamera({ name: 'SEMCRED', addresses: [{ ip: '127.0.0.1', port: 554, scheme: 'rtsp' }], source: 'rtsp://127.0.0.1:554/' });
+    assert.equal((await api.cameraConfig(sem.id)).credential, null);
+    await api.setCameraCredentials(sem.id, { username: 'novo', password: 'p' });
+    assert.equal((await api.cameraConfig(sem.id)).credential!.username, 'novo');
+    // câmera inexistente: 404 antes de sondar (E7/Q2: simetria com o corpo inválido)
+    const probesBefore404 = probes.length;
+    await assert.rejects(api.setCameraCredentials('id-que-nao-existe', { username: 'u', password: 'p' }), (e: unknown) => statusOf(e) === 404);
+    assert.equal(probes.length, probesBefore404, '404 não sonda a câmera');
+  } finally { srv.close(); }
+});
+
+// E4 do plano: sem fixture de perfil custom, a capacidade é travada pela leitura do POLICY exportado.
+test('POLICY: POST /cameras/:id/credentials exige camera.manage', () => {
+  const { POLICY } = require('../../../../server/lib/rbac.js');
+  assert.equal(POLICY['POST /api/v1/cameras/:id/credentials'].cap, 'camera.manage');
+});

@@ -82,6 +82,7 @@ const POLICY = {
   'DELETE /api/v1/cameras/:id/profiles': { cap: 'camera.manage', camera: (a) => a.id },
   'POST /api/v1/cameras/:id/onvif-refresh': { cap: 'camera.manage', camera: (a) => a.id },
   'POST /api/v1/cameras/:id/manufacturer': { cap: 'camera.manage', camera: (a) => a.id },
+  'POST /api/v1/cameras/:id/credentials': { cap: 'camera.manage', camera: (a) => a.id },
   // ATTENTION: on this route the `:id` is a CAMERA id (the DVR resync is `/devices/:id/sync`)
   'POST /api/v1/devices/:id/onvif': { cap: 'camera.manage', camera: (a) => a.id },
   'POST /api/v1/archive/export': { cap: 'camera.manage', camera: (a, store) => cameraForProfile(store, a.stream_profile_id) },

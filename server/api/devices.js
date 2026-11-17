@@ -239,6 +239,9 @@ function deviceRoutes(store, deps) {
       port: addrs[0] && addrs[0].informada ? addrs[0].port : null })
                     : { primary: null, secondary: null };
     const sources = (await profilesOf(id)).filter((p) => p.source_url);
+    // spec 2026-11-17: o modal mostra o username da credencial (o segredo é selado e nunca sai do cofre;
+    // a rota já é camera.manage, a mesma capacidade deste read)
+    const credRow = cam.credential_ref ? await cat.credentials.get(cam.credential_ref) : null;
     // Spec 2026-10-27: the mode belongs to the CAMERA (meta), never to a profile — the recorder
     // picks the WIDEST profile to write, the UI used to pick 'main': two answers to one question.
     const recordingMode = cam.recording_mode === 'motion' ? 'motion' : 'continuous';
@@ -259,6 +262,7 @@ function deviceRoutes(store, deps) {
       manufacturer_source: onvif && onvif.manufacturer ? 'onvif' : manual ? 'manual' : null,
       synced_at: (onvif && onvif.synced_at) || null,
       onvif, manual,
+      credential: credRow ? { username: credRow.username ?? null } : null,
       rtsp: {
         primary: withoutUser((authorized[0] || {}).source_url || (manual && manual.rtsp_primary)
           || (isKnownBrand(brand) ? urls.primary : null) || null),
@@ -570,6 +574,20 @@ function deviceRoutes(store, deps) {
 
     // canonical display names for the combobox — a new row in BRANDS = a new brand here
     'GET /api/v1/camera-brands': async () => listBrands(),
+
+    // spec 2026-11-17 (editar credenciais): PERSISTÊNCIA pura — a sonda e o republish do Hub vivem no
+    // wrapper do main.js (que é quem tem hubApi/primeCredentials). Com ref existente é UPSERT no mesmo
+    // ref (E7: o DVR compartilha a credencial com os canais); sem ref, cria 'cred:' + uuid e vincula.
+    'POST /api/v1/cameras/:id/credentials': async ({ id, username, password } = {}) => {
+      if (typeof username !== 'string' || !username) throw new AppError('field_invalid', { field: 'username' });
+      if (typeof password !== 'string' || !password) throw new AppError('field_invalid', { field: 'password' });
+      const row = await cat.cameras.get(id);
+      if (!row) throw new AppError('camera_not_found');
+      const ref = row.credential_ref || 'cred:' + crypto.randomUUID();
+      await cat.credentials.put(ref, { username, secret: deps.credentials.seal(password) });
+      if (!row.credential_ref) await cat.cameras.update(id, { credential_ref: ref });
+      return flat(await cat.cameras.get(id)); // flat: o republish do wrapper consome o row achatado (emendas E6)
+    },
 
     // ponytail: renaming, moving folder and configuring recording are the same PATCH; group_id null = root
     'PATCH /api/v1/cameras/:id': async ({ id, name, group_id, recording, retention_days,
