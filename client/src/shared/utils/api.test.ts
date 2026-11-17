@@ -523,11 +523,11 @@ test('POST /cameras/:id/credentials: probe before save; refused keeps the vault 
     // recusa: 400 e o cofre não muda (a leitura ainda mostra o username antigo)
     await assert.rejects(api.setCameraCredentials(cam.id, { username: 'u2', password: 'senha-errada' }), (e: unknown) => statusOf(e) === 400);
     assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u1');
-    // 'unknown' (câmera fora do ar) NÃO bloqueia a escrita — caso BV004 (spec §3.2.2, emenda E7/S2).
-    // A mutação `verdict !== 'ok'` no wrapper morre aqui: o POST lançaria 400.
-    await api.setCameraCredentials(cam.id, { username: 'u1', password: 'camera-fora-do-ar' });
+    // 'unknown' (câmera fora do ar) NÃO bloqueia a escrita — caso BV004 (spec §3.2.2, emendas E7/E8).
+    // A mutação `verdict !== 'ok'` morre no 400; a mutação "200 mas não gravou" morre na leitura de 'u3'.
+    await api.setCameraCredentials(cam.id, { username: 'u3', password: 'camera-fora-do-ar' });
     assert.equal(probes[probes.length - 1].pass, 'camera-fora-do-ar');
-    assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u1');
+    assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u3');
     // ok: grava, lê de volta; rtsp:false prova que restart é decisionado pelo conf, não pela rota
     assert.deepEqual(await api.setCameraCredentials(cam.id, { username: 'u2', password: 'p2' }), { ok: true, restarted: false });
     assert.equal((await api.cameraConfig(cam.id)).credential!.username, 'u2');

@@ -112,7 +112,7 @@ export const en = {
   'cameras.settings.credentials_pass': 'Password',
   'cameras.settings.credentials_pass_placeholder': 'New password',
   'cameras.settings.credentials_refused': 'The camera refused these credentials (RTSP 401). Nothing changed.',
-  'cameras.settings.credentials_saved': 'Credential saved. Capture restarted with the new credential.',
+  'cameras.settings.credentials_saved': '✓ Credential saved. Capture restarted with the new credential.',
   'cameras.settings.credentials_cancel': 'Cancel',
   'cameras.settings.rtsp_user': 'RTSP user',
   'cameras.settings.searching': 'Searching…',

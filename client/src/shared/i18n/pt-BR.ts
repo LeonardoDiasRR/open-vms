@@ -113,7 +113,7 @@ export const ptBR: Record<MessageKey, string> = {
   'cameras.settings.credentials_pass': 'Senha',
   'cameras.settings.credentials_pass_placeholder': 'Nova senha',
   'cameras.settings.credentials_refused': 'A câmera recusou essa credencial (RTSP 401). Nada foi alterado.',
-  'cameras.settings.credentials_saved': 'Credencial salva. Captura reiniciada com a nova credencial.',
+  'cameras.settings.credentials_saved': '✓ Credencial salva. Captura reiniciada com a nova credencial.',
   'cameras.settings.credentials_cancel': 'Cancelar',
   'cameras.settings.rtsp_user': 'Usuário RTSP',
   'cameras.settings.searching': 'buscando…',

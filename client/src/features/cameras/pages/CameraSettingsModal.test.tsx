@@ -81,6 +81,15 @@ describe('CameraSettingsModal: a single General tab (spec 2026-10-19)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit credentials' }));
     expect(await screen.findByRole('dialog', { name: 'Credentials — Camera 1' })).toBeInTheDocument();
   });
+
+  // spec §6 teste 2 (emenda E8): o ramo `—` sem credencial é discriminação obrigatória.
+  it('linha Usuário RTSP mostra — sem credencial', async () => {
+    const dlg = mkDlg();
+    const { api } = mkApi(); // cfgBase não tem credential: ramo nulo do configValue
+    renderModal(<CameraSettingsModal dlg={dlg} api={api} camera={{ id: 'c1', name: 'Camera 1' }} onClose={() => {}} canEdit />);
+    const dt = await screen.findByText('RTSP user');
+    expect(dt.nextElementSibling?.textContent).toBe('\u2014'); // <dt>label</dt><dd>—</dd> (dl.nx-cfg)
+  });
 });
 
 // spec 2026-10-27 (modal-header-ativa v4): the active switch lives in .nx-titlebar (before .nx-close),
