@@ -18,6 +18,7 @@ const mkApi = (over: Record<string, unknown> = {}) => {
     cameraOnvifRefresh: (_id: string, body?: unknown) => { calls.push(['refresh', body]); return Promise.resolve({ ...cfgBase }); },
     setCameraOptions: (_id: string, body: unknown) => { calls.push(['patch', body]); return Promise.resolve({ ...cfgBase, ...(body as object) }); },
     setCameraManufacturer: (_id: string, name: string) => { calls.push(['manual', name]); return Promise.resolve({ ...cfgBase }); },
+    setCameraCredentials: (_id: string, body: unknown) => { calls.push(['cred', body]); return Promise.resolve({ ok: true, restarted: true }); },
     cameraBrands: () => Promise.resolve([]),
   };
   return { calls, api: { ...base, ...over } };
@@ -49,14 +50,36 @@ describe('CameraSettingsModal: a single General tab (spec 2026-10-19)', () => {
     fireEvent.click(container.querySelectorAll('.nx-linha-ativa .nx-switch')[0] as Element); // recording ON: makes line 2 exist
     const line1 = container.querySelector('.nx-cta-linha.nx-linha-ativa') as HTMLElement;
     const interactive = Array.from(line1.querySelectorAll('input, button'));
-    expect(interactive).toHaveLength(2);
+    expect(interactive).toHaveLength(3);                              // gravação + Edit credentials + Set manufacturer (spec 2026-11-17)
     expect(interactive[0].classList.contains('nx-switch')).toBe(true);   // recording
-    expect(interactive[1].classList.contains('nx-btn')).toBe(true);      // Set manufacturer
-    expect(interactive[1].classList.contains('spacer-left')).toBe(true);
+    expect(interactive[1].classList.contains('nx-btn')).toBe(true);      // Edit credentials
+    expect(interactive[1].textContent).toBe('Edit credentials');
+    expect(interactive[1].classList.contains('spacer-left')).toBe(true); // o spacer mudou de dono (spec: CTA novo à esquerda)
+    expect(interactive[2].classList.contains('nx-btn')).toBe(true);      // Set manufacturer
+    expect(interactive[2].classList.contains('spacer-left')).toBe(false);
     const line2 = container.querySelector('.nx-cta-linha.nx-linha-opcoes') as HTMLElement;
     expect(line2).not.toBeNull();
     expect(line1.compareDocumentPosition(line2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(container.querySelector('.nx-linha-switch')).toBeNull();      // a linha antiga morreu
+  });
+
+  // spec 2026-11-17 (editar credenciais): o CTA abre a modal nova; a linha Usuário RTSP vem do config.
+  it('CTA Edit credentials fica disabled sem canEdit', async () => {
+    const dlg = mkDlg();
+    const { api } = mkApi();
+    renderModal(<CameraSettingsModal dlg={dlg} api={api} camera={{ id: 'c1', name: 'Camera 1' }} onClose={() => {}} canEdit={false} />);
+    const cta = await screen.findByRole('button', { name: 'Edit credentials' });
+    expect(cta.hasAttribute('disabled')).toBe(true);
+  });
+
+  it('linha Usuário RTSP mostra o username; o CTA abre a modal de credenciais', async () => {
+    const dlg = mkDlg();
+    const { api } = mkApi({ cameraConfig: () => Promise.resolve({ ...cfgBase, credential: { username: 'admin' } }) });
+    renderModal(<CameraSettingsModal dlg={dlg} api={api} camera={{ id: 'c1', name: 'Camera 1' }} onClose={() => {}} canEdit />);
+    expect(await screen.findByText('RTSP user')).toBeInTheDocument();
+    expect(await screen.findByText('admin')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit credentials' }));
+    expect(await screen.findByRole('dialog', { name: 'Credentials — Camera 1' })).toBeInTheDocument();
   });
 });
 
