@@ -1481,3 +1481,9 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
 .server-port-row .sp-port { flex: none; width: 90px; }
 .nx-dialog-cartao { border-radius: var(--radius-lg); }
 .nx-cartao { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
+
+/* spec 2026-11-17 (editar credenciais): modal de credenciais — mais estreita, rótulos de campo e
+   a linha de sucesso. */
+.nx-dialog-credenciais { width: 430px; max-width: 92vw; }
+.nx-cred-rotulo { display: block; margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+.nx-cred-ok { margin: 10px 0 0; font-size: 13px; color: var(--accent); }
