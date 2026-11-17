@@ -90,6 +90,8 @@ export type CameraConfig = {
   onvif_error?: string;
   manual: Manual | null;
   rtsp: { primary?: string; secondary?: string };
+  // spec 2026-11-17 (editar credenciais): o username da credencial salva; o segredo é selado e NUNCA sai
+  credential?: { username: string | null } | null;
   profiles?: { name: string; source_url?: string; width?: number; height?: number }[];
 };
 // spec 2026-10-19 (Settings > Recordings): the global config lives in the state under the `settings` key.
@@ -406,6 +408,11 @@ export class ApiClient {
   // Spec 2026-10-27: `ativa` (camera ativa) travels in the same PATCH.
   setCameraOptions(id: string, body: { recording?: boolean; recording_mode?: 'continuous' | 'motion'; motion_sensitivity?: number; ativa?: boolean }) {
     return this.req<Camera>('PATCH', `/api/v1/cameras/${encodeURIComponent(id)}`, body);
+  }
+  // spec 2026-11-17 (editar credenciais): troca login/senha da câmera. O servidor sonda a credencial
+  // antes de gravar e devolve 400 `camera_credential_refused` se a câmera recusar (nada muda).
+  setCameraCredentials(id: string, body: { username: string; password: string }) {
+    return this.req<{ ok: boolean; restarted: boolean }>('POST', `/api/v1/cameras/${encodeURIComponent(id)}/credentials`, body);
   }
   deleteCamera(id: string) { return this.req<{ deleted: string }>('DELETE', `/api/v1/cameras/${encodeURIComponent(id)}`); }
 }
