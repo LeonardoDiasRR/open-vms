@@ -238,7 +238,15 @@ describe('useCameras multi-server', () => {
     const dead = srvApi({ cameras: async () => { throw new Error('http 503'); } });
     const A = srvApi({ cameras: async () => [cam('a1')] });
     const { result } = renderHook(() => useCameras([{ id: 'A', api: A }, { id: 'B', api: dead }]), { wrapper });
-    await waitFor(() => expect(result.current.connection.ok).toBe(false));
+    // E7 (23/11): o predicate original (so connection.ok === false) era verdadeiro no ESTADO INICIAL
+    // (useCameras.ts:114 — polled vazio => ok false), entao o waitFor resolvia no primeiro tick e a
+    // assercao de cameras corria sem ordem nenhuma contra o refresh do A (flake medido na onda
+    // printscreen: 3/3 vermelhos com um arquivo de teste a mais na suíte). Esperar o ESTADO AFIRMADO
+    // — fatia do A presente E agregado falhando — é o que o caso prova.
+    await waitFor(() => {
+      expect(result.current.cameras.map((c) => c.id)).toEqual(['a1']);
+      expect(result.current.connection.ok).toBe(false);
+    });
     expect(result.current.cameras.map((c) => c.id)).toEqual(['a1']);
     expect(result.current.connections.find((c) => c.serverId === 'B')).toEqual({ serverId: 'B', ok: false, message: 'http 503' });
     expect(result.current.connections.find((c) => c.serverId === 'A')?.ok).toBe(true);
