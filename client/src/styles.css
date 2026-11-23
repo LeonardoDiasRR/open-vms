@@ -682,6 +682,8 @@ h2 { font-size: 13px; font-weight: 600; margin: 0 0 8px; }
    evita selecionar o texto do overlay durante o arrasto. */
 .cell-actions .cell-ptz { line-height: 1; font-size: 13px; display: inline-flex; align-items: center; }
 .cell-ptz svg { width: 18px; height: 18px; display: block; }
+.cell-actions .cell-print { line-height: 1; font-size: 13px; display: inline-flex; align-items: center; }
+.cell-print svg { width: 18px; height: 18px; display: block; }
 .cell-ptz.ativo { background: var(--active-bg); border-color: var(--accent); color: var(--accent); }
 .stream-cell.ptz-ativo { cursor: crosshair; user-select: none; }
 .stream-cell.ptz-ativo .cell-actions button { cursor: pointer; }
