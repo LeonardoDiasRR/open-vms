@@ -226,6 +226,10 @@ export const en = {
   'live.loading': 'Loading…',
   'live.fullscreen': 'Fullscreen',
   'live.remove': 'Remove',
+  // spec 2026-11-23 (printscreen): o rotulo curto no tooltip; a faixa usa sentence case (plan toast).
+  'live.printscreen': 'Screenshot',
+  'live.printscreen_saved': 'Screenshot saved: {file}',
+  'live.printscreen_error': 'Capture failed',
   'live.playback_error': 'Playback error',
   'live.webrtc_disconnected': 'WebRTC connection dropped',
   'live.webrtc_failed': 'Could not open WebRTC',
