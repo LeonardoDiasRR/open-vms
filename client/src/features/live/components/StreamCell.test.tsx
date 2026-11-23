@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { LanguageProvider } from '@/shared/i18n';
@@ -952,5 +952,53 @@ describe('StreamCell: câmera inativa (plano 2026-10-27)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+// spec 2026-11-23 (printscreen): a captura e DOM de verdade sobre jsdom mockado (canvas e ancora sao
+// ENVIRONMENT, o mesmo contrato do FakePc acima). suíte em 'en' (vitest.setup): rotulo 'Screenshot'.
+describe('printscreen (spec 2026-11-23)', () => {
+  const videoComFrame = (container: HTMLElement) => {
+    const video = container.querySelector('video')!;
+    Object.defineProperty(video, 'readyState', { value: 2 });
+    Object.defineProperty(video, 'videoWidth', { value: 640 });
+    Object.defineProperty(video, 'videoHeight', { value: 360 });
+  };
+  const mocksCaptura = () => {
+    const downloads: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ drawImage: () => {} } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,QUJD');
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { downloads.push(this); });
+    return downloads;
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it('renders the Screenshot button even without PTZ capability (D4)', () => {
+    mount(<StreamCell api={api} camera={camera} profiles={profiles} />);
+    expect(screen.getByRole('button', { name: 'Screenshot' })).toBeInTheDocument();
+  });
+
+  it('click with a decoded frame downloads a JPEG named after the camera and shows the faixa', () => {
+    const onRemove = vi.fn();
+    const { container } = mount(<StreamCell api={api} camera={camera} profiles={profiles} onRemove={onRemove} />);
+    videoComFrame(container);
+    const downloads = mocksCaptura();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+
+    expect(downloads).toHaveLength(1);
+    expect(downloads[0].getAttribute('href')).toBe('data:image/jpeg;base64,QUJD');
+    expect(downloads[0].getAttribute('download')).toMatch(/^Camera_1_\d{4}-\d{2}-\d{2}-\d{6}\.jpg$/);
+    expect(container.querySelector('.cell-ptz-faixa')?.textContent).toContain('Screenshot saved:');
+    expect(onRemove).not.toHaveBeenCalled(); // the click does not remove the cell
+  });
+
+  it('click without a frame: no download, faixa reports the failure', () => {
+    const { container } = mount(<StreamCell api={api} camera={camera} profiles={profiles} />);
+    const downloads = mocksCaptura();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Screenshot' }));
+
+    expect(downloads).toHaveLength(0);
+    expect(container.querySelector('.cell-ptz-faixa')?.textContent).toContain('Capture failed');
   });
 });

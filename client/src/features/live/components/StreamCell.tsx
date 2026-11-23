@@ -6,6 +6,7 @@ import { useFullscreen } from '@/shared/hooks/useTelaCheia';
 import { ARROW_THRESHOLD_PX, selectionBox, fixedRectangle, dragVector, keyVector, zoomVector, zoomShortcutVector } from '@/features/live/services/ptz';
 import type { PtzApi } from '@/features/live/hooks/usePtz';
 import { useT } from '@/shared/i18n';
+import { capturarFrame, nomeCaptura } from '@/shared/utils/captura';
 import PtzPanel from './PainelPtz';
 import OverlayPtz, { type OverlayPtzHandle } from './OverlayPtz';
 
@@ -44,6 +45,18 @@ function Joystick({ filled }: { filled: boolean }) {
       <path d="M6 15v-2" />
       <path d="M12 15V9" />
       <circle cx="12" cy="6" r="3" fill={filled ? 'currentColor' : 'none'} />
+    </svg>
+  );
+}
+
+// CameraIcon: Lucide drawing (lucide.dev, ISC) — same contract as the Joystick above: inline SVG,
+// stroke currentColor, 18px fixed by CSS (spec 2026-11-23, printscreen).
+function CameraIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+      strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+      <circle cx="12" cy="13" r="3" />
     </svg>
   );
 }
@@ -405,6 +418,29 @@ export default function StreamCell({ api, camera, profiles = [], mode = 'live', 
     };
   }, [ptzActive, ptz]);
 
+  // spec 2026-11-23 (printscreen): a faixa de retorno do clique (sucesso com o nome do arquivo, erro
+  // sem frame). O timer mora em ref: clique repetido SUBSTITUI o timer, nunca empilha.
+  const [printMsg, setPrintMsg] = useState<{ text: string; erro: boolean } | null>(null);
+  const printTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (printTimer.current) clearTimeout(printTimer.current); }, []);
+
+  function capturarTela() {
+    // o guard de "sem frame" esta em capturarFrame; o catch e para o toDataURL que lanca em browser raro
+    let url: string | null = null;
+    try { url = capturarFrame(videoRef.current); } catch { url = null; }
+    if (printTimer.current) clearTimeout(printTimer.current);
+    if (url === null) {
+      setPrintMsg({ text: tRef.current('live.printscreen_error'), erro: true });
+    } else {
+      const a = document.createElement('a');
+      a.download = nomeCaptura(camera.name, new Date());
+      a.href = url;
+      a.click();
+      setPrintMsg({ text: tRef.current('live.printscreen_saved', { file: a.download }), erro: false });
+    }
+    printTimer.current = setTimeout(() => setPrintMsg(null), 2200);
+  }
+
   return (
     // double click on the stream = fullscreen (already in fullscreen, the double click is native to the video)
     <div className={`stream-cell${offline ? ' off' : ''}${ptzActive ? ' ptz-ativo' : ''}`} ref={ref}
@@ -480,6 +516,11 @@ export default function StreamCell({ api, camera, profiles = [], mode = 'live', 
                 <Joystick filled={ptzActive} />
               </button>
             )}
+            {/* spec 2026-11-23 (printscreen): always visible (D4), right of the joystick (D3) */}
+            <button className="cell-print" aria-label={t('live.printscreen')} title={t('live.printscreen')}
+              onClick={capturarTela}>
+              <CameraIcon />
+            </button>
             {/* TODO(i18n): no `live.exit_fullscreen` key in en.ts yet (task 6.2). */}
             <button title={isFullscreen ? 'Exit fullscreen' : t('live.fullscreen')} onClick={toggleFullscreen}>⛶</button>
             {onRemove && <button title={t('live.remove')} onClick={onRemove}>✕</button>}
@@ -488,6 +529,11 @@ export default function StreamCell({ api, camera, profiles = [], mode = 'live', 
         {(ptzActive || ptzError) && (
           <div className={`cell-ptz-faixa${ptzError ? ' erro' : ''}`} role="status" aria-live="polite">
             {ptzError ? `PTZ: ${ptzError}` : t('live.ptz_active_hint')}
+          </div>
+        )}
+        {printMsg && (
+          <div className={`cell-ptz-faixa${printMsg.erro ? ' erro' : ''}`} role="status" aria-live="polite">
+            {printMsg.text}
           </div>
         )}
         <div className="cell-stream">
