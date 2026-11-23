@@ -16,6 +16,7 @@ const EXACT: Array<[string, string, number]> = [
   ['shared/ui/SearchField.tsx', "title={t('shared.clear_search')}", 1],
   ['features/cameras/components/ResultadosDescoberta.tsx', 'title={`Channels of ${r.ip}`}', 1],
   ['shared/ui/UserMenu.tsx', "title={t('topbar.user_menu')}", 1],
+  ['features/live/components/StreamCell.tsx', "title={t('live.printscreen')}", 1],
 ];
 
 // [file, minimum of title= in the file] — the dynamic titles of these files do not fit as a single
