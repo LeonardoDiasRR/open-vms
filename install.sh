@@ -1,14 +1,57 @@
 #!/usr/bin/env bash
+# Não exponha credenciais se o operador executar bash -x.
+set +x
 set -Eeuo pipefail
 REPO_URL="https://github.com/LeonardoDiasRR/open-vms.git"
 INSTALL_DIR="${OPENVMS_INSTALL_DIR:-/opt/openvms}"
 MEDIA_DIR="${OPENVMS_MEDIA_DIR:-$INSTALL_DIR/archive}"
 BRANCH="${OPENVMS_REF:-main}"
 BUILD_TIMEOUT="${OPENVMS_BUILD_TIMEOUT:-1800}"
+START_TIMEOUT="${OPENVMS_START_TIMEOUT:-300}"
 HEALTH_TIMEOUT="${OPENVMS_HEALTH_TIMEOUT:-180}"
 RTSP_PORT="${OPENVMS_RTSP_PORT:-8554}"
-say() { printf '\033[1;36m[OpenVMS]\033[0m %s\n' "$*"; }
-die() { printf 'Erro: %s\n' "$*" >&2; exit 1; }
+log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/openvms"
+log_file=''
+say() {
+  printf '[OpenVMS] %s\n' "$*"
+  if [ -n "$log_file" ]; then printf '[OpenVMS] %s\n' "$*" >> "$log_file"; fi
+}
+die() {
+  local message="$1" rc="${2:-1}"
+  printf 'Erro: %s\n' "$message" >&2
+  if [ -n "$log_file" ]; then
+    printf 'Erro: %s\n' "$message" >> "$log_file" || true
+    printf 'Log: %s\n' "$log_file" >&2
+  fi
+  exit "$rc"
+}
+# Não registre a configuração renderizada nem o ambiente. O filtro também
+# protege os valores do PostgreSQL antes de exibir e gravar a saída do Compose.
+redact_compose() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line//"$pg_url"/[OCULTO]}
+    line=${line//"$pg_password"/[OCULTO]}
+    if [ -n "${OPENVMS_PG_URL:-}" ]; then line=${line//"$OPENVMS_PG_URL"/[OCULTO]}; fi
+    if [ -n "${OPENVMS_PG_PASSWORD:-}" ]; then line=${line//"$OPENVMS_PG_PASSWORD"/[OCULTO]}; fi
+    printf '%s\n' "$line"
+  done
+}
+run_phase() {
+  local phase="$1" limit="$2" rc
+  local -a statuses
+  shift 2
+  say "${phase} (limite: ${limit}s)..."
+  if (cd "$INSTALL_DIR" && timeout --signal=TERM --kill-after=30s "${limit}s" \
+    "${DOCKER[@]}" compose --progress plain "$@") 2>&1 | redact_compose | tee -a "$log_file"; then
+    return 0
+  else
+    statuses=("${PIPESTATUS[@]}")
+  fi
+  rc="${statuses[0]}"
+  if (( rc == 0 )); then die "Falha ao gravar o log da fase: $phase."; fi
+  die "$phase falhou (código $rc). Após corrigir a causa, execute novamente no mesmo diretório. Não apague .env, banco ou gravações." "$rc"
+}
 require_sudo() {
   command -v sudo >/dev/null 2>&1 || die "Sem permissão de escrita; instale sudo ou escolha um diretório gravável."
   sudo -v || die "Não foi possível obter permissão via sudo."
@@ -24,9 +67,12 @@ valid_dir() {
   [[ "$1" == /* && "$1" != *$'\n'* && "$1" != *$'\r'* ]] || die "$2 deve ser um caminho absoluto sem quebras de linha."
 }
 [ "$(uname -s)" = Linux ] || die "Somente Linux é suportado."
+(umask 077; mkdir -p -- "$log_dir") || die "Não foi possível criar o diretório de logs em $log_dir."
+log_file="$(mktemp "$log_dir/install.XXXXXXXX.log")" || die "Não foi possível criar o log em $log_dir."
+say "Log: $log_file"
 valid_dir "$INSTALL_DIR" OPENVMS_INSTALL_DIR
 valid_dir "$MEDIA_DIR" OPENVMS_MEDIA_DIR
-for limit in "$BUILD_TIMEOUT" "$HEALTH_TIMEOUT"; do
+for limit in "$BUILD_TIMEOUT" "$START_TIMEOUT" "$HEALTH_TIMEOUT"; do
   [[ "$limit" =~ ^[1-9][0-9]*$ ]] || die "Timeouts devem ser inteiros positivos em segundos."
 done
 if [[ ! "$RTSP_PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( 10#$RTSP_PORT > 65535 )); then
@@ -78,13 +124,12 @@ fs_for_path "$INSTALL_DIR"
 if [ ! -f "$INSTALL_DIR/.env" ]; then
   command -v openssl >/dev/null || die "openssl é necessário para criar um segredo."
   password="$(openssl rand -hex 32)"
-  env_tmp="$INSTALL_DIR/.env.tmp.$$"
+  env_tmp="$("${FS[@]}" mktemp "$INSTALL_DIR/.env.tmp.XXXXXXXX")" || die "Não foi possível criar o .env temporário."
   trap 'if [ -n "${env_tmp:-}" ]; then "${FS[@]}" rm -f -- "$env_tmp"; fi' EXIT
-  "${FS[@]}" install -m 600 /dev/null "$env_tmp"
   printf 'OPENVMS_PG_PASSWORD=%s\nOPENVMS_PG_URL=postgres://postgres:%s@127.0.0.1:55433/openvms\nOVMS_MEDIA_PATH=%s\n' "$password" "$password" "$MEDIA_DIR" | "${FS[@]}" tee "$env_tmp" >/dev/null
   unset password
   "${FS[@]}" chown "$(id -u):$(id -g)" "$env_tmp"
-  "${FS[@]}" ln -- "$env_tmp" "$INSTALL_DIR/.env" || die ".env surgiu durante a instalação; não vou sobrescrevê-lo."
+  "${FS[@]}" ln -T -- "$env_tmp" "$INSTALL_DIR/.env" || die "Não foi possível publicar .env sem sobrescrever um arquivo existente."
   "${FS[@]}" rm -f -- "$env_tmp"
   env_tmp=''
   say "Credenciais geradas em $INSTALL_DIR/.env (permissão restrita)."
@@ -121,7 +166,7 @@ if [ "${OPENVMS_MEDIA_DIR+x}" ] && [ "$MEDIA_DIR" != "$env_media" ]; then
   die "OPENVMS_MEDIA_DIR difere de OVMS_MEDIA_PATH existente; ajuste .env explicitamente."
 fi
 MEDIA_DIR="$env_media"
-unset pg_password pg_url env_media
+unset env_media REPLY
 mode="$(stat -c %a "$INSTALL_DIR/.env")" || die "Não foi possível ler permissões de .env."
 if [ "$mode" != 600 ]; then
   if [ ! -O "$INSTALL_DIR/.env" ]; then
@@ -152,14 +197,16 @@ if [ ! -e "$INSTALL_DIR/conf/config.yaml" ]; then
   fi
 fi
 say "Validando Compose..."
-(cd "$INSTALL_DIR" && docker_probe compose config --quiet)
-say "Construindo e iniciando serviços (limite: ${BUILD_TIMEOUT}s)..."
-if (cd "$INSTALL_DIR" && timeout --signal=INT --kill-after=30s "${BUILD_TIMEOUT}s" "${DOCKER[@]}" compose up -d --build); then
+# Erros de interpretação podem conter valores de .env. Não inclua essa saída no log.
+if (cd "$INSTALL_DIR" && docker_probe compose config --quiet) >/dev/null 2>&1; then
   :
 else
   rc=$?
-  die "Compose falhou (código $rc). Confira 'docker compose ps' em $INSTALL_DIR e execute novamente após corrigir a causa."
+  die "Validação do Compose falhou (código $rc). Confira 'docker compose config --quiet' em $INSTALL_DIR." "$rc"
 fi
+run_phase "Construção das imagens" "$BUILD_TIMEOUT" build
+run_phase "Inicialização dos serviços" "$START_TIMEOUT" up -d --no-build
+say "Verificando a publicação da interface e a saúde dos serviços..."
 # O Compose em modo detached não espera o dist copiar a UI nem a API ficar saudável.
 deadline=$((SECONDS + HEALTH_TIMEOUT))
 while (( SECONDS < deadline )); do

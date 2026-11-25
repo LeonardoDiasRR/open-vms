@@ -8,13 +8,15 @@ ARG VITE_ARCHIVE_ADAPTIVE_PREVIEW=0
 ENV VITE_ARCHIVE_ADAPTIVE_PREVIEW=$VITE_ARCHIVE_ADAPTIVE_PREVIEW
 RUN npm run build
 
+# Instala a dependencia do gravador antes de copiar o codigo da API.
+FROM node:22-alpine AS ffmpeg
+COPY scripts/install-ffmpeg.sh /usr/local/bin/install-ffmpeg.sh
+RUN sh /usr/local/bin/install-ffmpeg.sh
+
 # estagio 2: o servidor
-FROM node:22-alpine AS api
+FROM ffmpeg AS api
 WORKDIR /app
 ENV NODE_ENV=production
-# ffmpeg: o recorder spawn /usr/bin/ffmpeg (spec 2026-10-16). Sem ele o ingest morria em
-# "spawn /usr/bin/ffmpeg ENOENT" — defeito medido nos eventos de ingest apos o deploy.
-RUN apk add --no-cache ffmpeg
 # ponytail: pg e a unica dep de runtime do servidor (server/package.json); sem ela o modo
 # postgres do compose (OPENVMS_PG_URL) quebra no boot — `node_modules` esta no .dockerignore
 COPY server/package.json server/package-lock.json ./server/

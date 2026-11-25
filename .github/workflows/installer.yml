@@ -1,0 +1,79 @@
+name: Installer
+
+on:
+  push:
+    branches: [main, 'fix/**']
+    paths:
+      - .github/workflows/installer.yml
+      - .dockerignore
+      - Dockerfile
+      - docker-compose.yml
+      - install.sh
+      - scripts/install-ffmpeg.sh
+      - 'scripts/test-install*.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test the installer and retry logic
+        run: |
+          bash scripts/test-install.sh
+          bash scripts/test-install-ffmpeg.sh
+      - name: Test recovery after a build with no network
+        shell: bash
+        run: |
+          set -euo pipefail
+          scratch=$(mktemp -d "$RUNNER_TEMP/openvms.XXXXXXXX")
+          export XDG_STATE_HOME="$scratch/state"
+          export OPENVMS_INSTALL_DIR="$scratch/app"
+          export OPENVMS_BUILD_TIMEOUT=600 OPENVMS_START_TIMEOUT=300 OPENVMS_HEALTH_TIMEOUT=180
+          git clone --local "$GITHUB_WORKSPACE" "$OPENVMS_INSTALL_DIR"
+          cd "$OPENVMS_INSTALL_DIR"
+          git remote set-url origin https://github.com/LeonardoDiasRR/open-vms.git
+          bash install.sh
+
+          cp -p .env "$scratch/env.before"
+          printf 'keep this recording\n' > archive/recovery.fixture
+          pg_before=$(docker compose ps -q postgres)
+          test -n "$pg_before"
+          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d openvms \
+            -c "CREATE TABLE install_recovery (value text); INSERT INTO install_recovery VALUES ('keep this row');"
+
+          cat > "$scratch/offline.yml" <<'YAML'
+          services:
+            api:
+              build:
+                target: ffmpeg
+                no_cache: true
+                network: none
+          YAML
+          rc=0
+          COMPOSE_FILE="docker-compose.yml:$scratch/offline.yml" bash install.sh > "$scratch/failure.txt" 2>&1 || rc=$?
+          cat "$scratch/failure.txt"
+          test "$rc" -ne 0
+          grep -F 'Instalando ffmpeg (tentativa 1/2' "$scratch/failure.txt"
+          grep -F 'Instalando ffmpeg (tentativa 2/2' "$scratch/failure.txt"
+          grep -F 'Não foi possível instalar o ffmpeg' "$scratch/failure.txt"
+          grep -F 'Construção das imagens falhou (código ' "$scratch/failure.txt"
+          ! grep -F 'Inicialização dos serviços (limite:' "$scratch/failure.txt" || exit 1
+          failure_log=$(sed -n 's/^Log: //p' "$scratch/failure.txt")
+          test "$(stat -c %a "$failure_log")" = 600
+          grep -F 'Construção das imagens falhou' "$failure_log"
+
+          bash install.sh
+          cmp .env "$scratch/env.before"
+          test "$(< archive/recovery.fixture)" = 'keep this recording'
+          test "$(docker compose ps -q postgres)" = "$pg_before"
+          test "$(docker compose exec -T postgres psql -At -U postgres -d openvms -c 'SELECT value FROM install_recovery;')" = 'keep this row'
+          curl -fsS http://127.0.0.1:7101/api/v1/health
+          curl -fsS -o /dev/null http://127.0.0.1:7102/
+          printf '\nPASS: recovery kept the environment, database row and recording file.\n'

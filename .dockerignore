@@ -6,3 +6,6 @@ docs
 .git
 worktrees
 *.log
+.env
+.env.*
+archive/

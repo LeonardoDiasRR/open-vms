@@ -63,7 +63,19 @@ Recordings are stored under `<install-dir>/archive/` by default (example:
 `OVMS_MEDIA_PATH` in `.env` later, to use another location.
 
 The installer keeps an existing `.env` and never runs `git pull`
-automatically.
+automatically. If a build or start fails, correct the error and run the
+installer again with the same directory. Keep the `.env`, database volumes,
+and recordings.
+
+The installer builds the images before it starts the services. It shows the
+failed phase and exit code. It writes a separate log for each run under
+`${XDG_STATE_HOME:-$HOME/.local/state}/openvms/`. The log does not include
+container runtime logs or the rendered Compose configuration.
+
+Set `OPENVMS_BUILD_TIMEOUT`, `OPENVMS_START_TIMEOUT`, or
+`OPENVMS_HEALTH_TIMEOUT` to change the default limits of 1800, 300, or 180
+seconds. During a build, each attempt to install FFmpeg has a 300-second
+limit. A network error or timeout gets one retry.
 
 > The installer uses the images defined in the Compose file and builds
 > locally. Publishing pre-built images on GHCR may come later.

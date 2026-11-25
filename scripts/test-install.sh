@@ -10,9 +10,24 @@ cat > "$ROOT/bin/docker" <<'MOCK'
 #!/usr/bin/env bash
 case "$1 $2" in
   'compose version'|'compose config'|'info ') exit 0 ;;
-  'compose up')
-    if [[ "${SLOW_UP:-0}" == 1 ]]; then sleep 5; fi
-    [[ "${FAIL_UP:-0}" != 1 ]] ;;
+  'compose --progress')
+    [[ "$3" == plain ]] || exit 96
+    case "$4" in
+      build)
+        [[ $# == 4 ]] || exit 96
+        printf 'build\n' >> "$MOCK_CALLS"
+        if [[ "${LEAK_BUILD:-0}" == 1 ]]; then
+          while IFS= read -r entry; do printf 'build: %s\n' "${entry#*=}"; done < .env
+        fi
+        if [[ "${SLOW_BUILD:-0}" == 1 ]]; then sleep 5; fi
+        exit "${BUILD_EXIT:-0}" ;;
+      up)
+        [[ "$*" == 'compose --progress plain up -d --no-build' ]] || exit 96
+        printf 'up\n' >> "$MOCK_CALLS"
+        if [[ "${SLOW_UP:-0}" == 1 ]]; then sleep 5; fi
+        exit "${UP_EXIT:-0}" ;;
+      *) exit 96 ;;
+    esac ;;
   'compose ps')
     if [[ "${SLOW_PS:-0}" == 1 ]]; then sleep 12; fi
     case "${*: -1}" in dist|api|web) echo "fake-${*: -1}" ;; esac ;;
@@ -69,7 +84,8 @@ run() {
   local name="$1" expected="$2" reason="$3" install="$ROOT/$1/app" rc=0
   shift 3
   mkdir -p "$(dirname "$install")"
-  (export PATH="$ROOT/bin:$PATH" SOURCE_DIR OPENVMS_INSTALL_DIR="$install" OPENVMS_MEDIA_DIR="$install/archive" OPENVMS_BUILD_TIMEOUT=2 OPENVMS_HEALTH_TIMEOUT=2
+  (export PATH="$ROOT/bin:$PATH" SOURCE_DIR OPENVMS_INSTALL_DIR="$install" OPENVMS_MEDIA_DIR="$install/archive" OPENVMS_BUILD_TIMEOUT=2 OPENVMS_HEALTH_TIMEOUT=2 OPENVMS_START_TIMEOUT=2
+   export XDG_STATE_HOME="$ROOT/$name/state" MOCK_CALLS="$ROOT/$name/calls"
    "$@" bash "$SOURCE_DIR/install.sh") > "$ROOT/$name.log" 2>&1 || rc=$?
   if [[ "$expected" == success && "$rc" != 0 || "$expected" == failure && "$rc" == 0 ]] || ! grep -Fq "$reason" "$ROOT/$name.log"; then
     printf 'FAIL %s (exit %s; expected %s)\n' "$name" "$rc" "$reason"; failures=$((failures + 1))
@@ -127,8 +143,36 @@ run unavailable_api_http failure 'Serviços não ficaram saudáveis' env API_HTT
   OPENVMS_INSTALL_DIR="$ROOT/preserved_media/app" OPENVMS_MEDIA_DIR="$ROOT/preserved_media/app/archive"
 run unavailable_web failure 'Serviços não ficaram saudáveis' env WEB_FAIL=1 \
   OPENVMS_INSTALL_DIR="$ROOT/preserved_media/app" OPENVMS_MEDIA_DIR="$ROOT/preserved_media/app/archive"
-run slow_build failure 'Compose falhou (código 124)' env SLOW_UP=1 \
+run slow_build failure 'Construção das imagens falhou (código 124)' env SLOW_BUILD=1 \
   OPENVMS_INSTALL_DIR="$ROOT/preserved_media/app" OPENVMS_MEDIA_DIR="$ROOT/preserved_media/app/archive"
+run startup_timeout failure 'Inicialização dos serviços falhou (código 124)' env SLOW_UP=1
+run startup_error failure 'Inicialização dos serviços falhou (código 27)' env UP_EXIT=27
+run build_error failure 'Construção das imagens falhou (código 25)' env BUILD_EXIT=25 LEAK_BUILD=1
+build_app="$ROOT/build_error/app"
+log_paths=("$ROOT/build_error/state/openvms/"*.log)
+# Leia a fixture sem escrever o segredo em stdout nem em um processo externo.
+secret_line=''
+IFS= read -r secret_line < "$build_app/.env"
+secret="${secret_line#*=}"
+log_text=$(< "${log_paths[0]}")
+console_text=$(< "$ROOT/build_error.log")
+if [[ "$(< "$ROOT/build_error/calls")" == build && "$(< "$ROOT/startup_error/calls")" == $'build\nup' \
+  && "$log_text" != *"$secret"* && "$console_text" != *"$secret"* && "$log_text" == *'[OCULTO]'* \
+  && "$log_text" == *'falhou (código 25)'* && "$(stat -c %a "${log_paths[0]}")" == 600 ]]; then
+  printf 'PASS phase_order_and_redacted_log\n'
+else
+  printf 'FAIL phase_order_and_redacted_log\n'; failures=$((failures + 1))
+fi
+cp "$build_app/.env" "$ROOT/failed_env.before"
+printf 'keep me\n' > "$build_app/archive/recording-fixture"
+run retry_after_build_failure success 'Instalação validada' env \
+  OPENVMS_INSTALL_DIR="$build_app" OPENVMS_MEDIA_DIR="$build_app/archive"
+if cmp -s "$ROOT/failed_env.before" "$build_app/.env" \
+  && [[ "$(< "$build_app/archive/recording-fixture")" == 'keep me' ]]; then
+  printf 'PASS retry_keeps_env_and_media\n'
+else
+  printf 'FAIL retry_keeps_env_and_media\n'; failures=$((failures + 1))
+fi
 run slow_daemon failure 'Timeout ao consultar o serviço dist' env SLOW_PS=1 \
   OPENVMS_INSTALL_DIR="$ROOT/preserved_media/app" OPENVMS_MEDIA_DIR="$ROOT/preserved_media/app/archive"
 /usr/bin/git -C "$ROOT/preserved_media/app" remote set-url origin https://github.com/other/repo.git
