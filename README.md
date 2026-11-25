@@ -37,28 +37,41 @@ nothing pulls a camera when nobody is watching it.
 
 ## Installation
 
-Use a Docker daemon on `linux/amd64`. The CPU and GPU images do not support
-other platforms.
-Use the Docker Compose plugin, version 2.24.4 or later, with support for
-`!reset` and `--pull never`.
+Use a Linux `amd64` host with a local Docker daemon. Install Bash, Git,
+`curl`, OpenSSL, GNU `timeout`, and the Docker Compose plugin. Use Compose
+2.24.4 or later with support for `!reset` and `--pull never`.
 
-The installer downloads OpenVMS images from the GitHub Container Registry
-(GHCR) by digest. It does not build images on the host. It downloads all
-images before it starts the services.
+The installer downloads the CPU or NVIDIA image from the public GitHub
+Container Registry (GHCR). A digest identifies the exact image content.
+The installer uses the digests in `deploy/images.env`. It also downloads
+PostgreSQL, Nginx, and MediaMTX from Docker Hub. It does not compile
+OpenVMS or require a GHCR login.
 
-Download the installer outside the installation directory.
+1. Select a Git branch or tag that contains `deploy/images.env`.
+   The `fix/install-prebuilt-ghcr` branch contains the image installer.
+2. Download the installer outside the installation directory. Use Bash.
 
-```bash
-curl -fsSL -o openvms-install.sh https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh
-```
+   ```bash
+   ref=fix/install-prebuilt-ghcr
+   curl -fsSL -o openvms-install.sh "https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/$ref/install.sh"
+   ```
 
-Run one of these commands.
+3. Review the downloaded script. Run one of the following commands in the
+   same shell. Use the same Git reference for the script and the checkout.
 
-| Command | Variant selection |
-| --- | --- |
-| `bash openvms-install.sh` | `OPENVMS_VARIANT=auto` (default). The installer uses the GPU image if the NVENC test passes. |
-| `OPENVMS_VARIANT=cpu bash openvms-install.sh` | The installer uses the CPU image and skips the GPU test. |
-| `OPENVMS_VARIANT=gpu bash openvms-install.sh` | The installer requires the GPU image and stops if the NVENC test fails. |
+   ```bash
+   # Automatic selection (default)
+   OPENVMS_REF="$ref" bash openvms-install.sh
+
+   # CPU only
+   OPENVMS_REF="$ref" OPENVMS_VARIANT=cpu bash openvms-install.sh
+
+   # NVIDIA only
+   OPENVMS_REF="$ref" OPENVMS_VARIANT=gpu bash openvms-install.sh
+   ```
+
+Automatic selection uses NVIDIA only if the NVENC test passes. CPU mode
+skips the GPU test. NVIDIA mode stops if the test fails.
 
 GPU mode requires a GPU with NVIDIA NVENC support, a compatible NVIDIA
 host driver, and the [NVIDIA Container Toolkit][nvidia-toolkit] configured
