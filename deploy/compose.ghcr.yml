@@ -1,0 +1,7 @@
+services:
+  api:
+    build: !reset null
+    image: "${OPENVMS_IMAGE:?Set OPENVMS_IMAGE to the CPU or GPU digest from deploy/images.env}"
+  dist:
+    build: !reset null
+    image: "${OPENVMS_IMAGE:?Set OPENVMS_IMAGE to the CPU or GPU digest from deploy/images.env}"
