@@ -37,72 +37,52 @@ nothing pulls a camera when nobody is watching it.
 
 ## Installation
 
-Use a Linux `amd64` host with a local Docker daemon. Install Bash, Git,
-`curl`, OpenSSL, GNU `timeout`, and the Docker Compose plugin. Use Compose
-2.24.4 or later with support for `!reset` and `--pull never`.
+Requirements: a Linux `amd64` host with Docker and the Docker Compose plugin
+(v2.24.4 or later). One command installs everything:
 
-The installer downloads the CPU or NVIDIA image from the public GitHub
-Container Registry (GHCR). A digest identifies the exact image content.
-The installer uses the digests in `deploy/images.env`. It also downloads
-PostgreSQL, Nginx, and MediaMTX from Docker Hub. It does not compile
-OpenVMS or require a GHCR login.
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | bash
+```
 
-1. Select a Git branch or tag that contains `deploy/images.env`.
-   The `main` branch contains the image installer.
-2. Download the installer outside the installation directory. Use Bash.
+`install.sh` does the following:
 
-   ```bash
-   ref=main
-   curl -fsSL -o openvms-install.sh "https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/$ref/install.sh"
-   ```
+- Clones the `main` branch to `/opt/openvms`.
+- Downloads the prebuilt OpenVMS image from GHCR by digest. It does not
+  compile code and it does not ask for a login.
+- Chooses the NVIDIA image when the NVENC encoding test passes. It chooses
+  the CPU image otherwise. It also downloads PostgreSQL, Nginx, and
+  MediaMTX.
+- Creates `/opt/openvms/.env` with a random database password. Recordings
+  go to `/opt/openvms/archive/` by default.
+- Starts the services and confirms that the API and the web interface are
+  healthy before it reports success.
 
-3. Review the downloaded script. Run one of the following commands in the
-   same shell. Use the same Git reference for the script and the checkout.
+To force one variant, put the variable before `bash`:
 
-   ```bash
-   # Automatic selection (default)
-   OPENVMS_REF="$ref" bash openvms-install.sh
+```bash
+curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | OPENVMS_VARIANT=cpu bash
+curl -fsSL https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/main/install.sh | OPENVMS_VARIANT=gpu bash
+```
 
-   # CPU only
-   OPENVMS_REF="$ref" OPENVMS_VARIANT=cpu bash openvms-install.sh
-
-   # NVIDIA only
-   OPENVMS_REF="$ref" OPENVMS_VARIANT=gpu bash openvms-install.sh
-   ```
-
-Automatic selection uses NVIDIA only if the NVENC test passes. CPU mode
-skips the GPU test. NVIDIA mode stops if the test fails.
-
-GPU mode requires a GPU with NVIDIA NVENC support, a compatible NVIDIA
-host driver, and the [NVIDIA Container Toolkit][nvidia-toolkit] configured
-for Docker. The installer tests NVENC by encoding a short H.264 video in
-the GPU image. `nvidia-smi` alone does not confirm that NVENC works.
-
-For a new installation in `auto` mode, the installer uses the CPU image
-only if it finds that GPU encoding is unavailable. The log gives the
-reason. A Docker or registry error does not cause a switch to CPU.
+The NVIDIA variant requires a GPU with NVENC support, a compatible NVIDIA
+driver, and the [NVIDIA Container Toolkit][nvidia-toolkit].
 
 [nvidia-toolkit]: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 
-### Installation settings
+### Options
 
-The default installation directory is `/opt/openvms`. The installer creates
-`.env` with a random database password if that file does not exist.
+- `OPENVMS_INSTALL_DIR` — installation directory (default `/opt/openvms`).
+- `OPENVMS_MEDIA_DIR` — recording directory, set before install (default
+  `<install-dir>/archive/`).
+- `OPENVMS_PULL_TIMEOUT` (900), `OPENVMS_START_TIMEOUT` (300),
+  `OPENVMS_HEALTH_TIMEOUT` (180) — phase limits in seconds.
 
-- Set `OPENVMS_INSTALL_DIR` to change the installation directory.
-- Set `OPENVMS_REF` to select a compatible Git reference for a new checkout.
-  Use the installer from that reference.
-- Set `OPENVMS_MEDIA_DIR` before installation to change the recording
-  directory. The default is `<install-dir>/archive/`.
+The installer never runs `git pull` on an existing checkout and never
+replaces its variant, digest, database, or recordings.
 
 Use a local file system for the recording directory during installation.
-To use an NFS share, mount it on the host. Set `OVMS_MEDIA_PATH` in `.env`
-to the mount path. Set the directory permissions to let the container
-write to the share. With NFS root squash, mode `700` can prevent writes.
-
-The image sets the playback preview option at build time. The installer
-stops before startup if `OPENVMS_PLAYBACK_PREVIEW` does not match
-`OPENVMS_IMAGE_PREVIEW` in `deploy/images.env`.
+To use an NFS share, mount it on the host, set `OVMS_MEDIA_PATH` in `.env`,
+and set permissions that let the container write.
 
 ### First sign-in
 
@@ -121,15 +101,15 @@ The installer does not migrate an active installation that uses a local
 build. Schedule a separate maintenance window for that migration.
 
 For an existing GHCR installation, the installer keeps the installed
-variant and image digest or stops. It does not switch an existing GPU
-installation to CPU if the NVENC test fails. It does not refresh the
-PostgreSQL, Nginx, or MediaMTX image tags. It does not replace existing
-containers. If the original `.env` or a required container is missing,
-restore it before you run the installer again.
+variant and image digest or stops. It does not refresh the PostgreSQL,
+Nginx, or MediaMTX image tags. It does not replace existing containers. If
+the original `.env` or a required container is missing, restore it before
+you run the installer again.
 
 Keep the Git history for the revision in `deploy/images.env`. The installer
-checks that the source and Compose files match the release. Keep credentials
-and the recording path in `.env`. Do not override them in the shell.
+checks that the source and Compose files match the release. Keep
+credentials and the recording path in `.env`. Do not override them in the
+shell.
 
 If a step fails, check the phase, exit code, and log path in the installer
 output. Each run writes a log under
@@ -143,52 +123,6 @@ cause of the failure. Run the installer again in the same directory.
 Keep `.env`, `conf/`, the key in the `ovms-data` volume, the database
 volume, and the recordings. Do not use `docker compose down -v` for
 recovery. The installer does not roll back database changes.
-
-To change a timeout, set its variable to a positive integer in seconds.
-
-| Variable | Default (seconds) | Phase |
-| --- | ---: | --- |
-| `OPENVMS_PULL_TIMEOUT` | 900 | All image downloads and any retry combined |
-| `OPENVMS_START_TIMEOUT` | 300 | Service startup |
-| `OPENVMS_HEALTH_TIMEOUT` | 180 | Health checks after startup |
-
-### Compose maintenance
-
-Run the commands from the installation directory. Use the same Compose
-project name as the installer. Find the selected image digest in the
-installation log. Compare it with the full references in
-`deploy/images.env`: `OPENVMS_IMAGE_CPU` for CPU or `OPENVMS_IMAGE_GPU`
-for GPU. Use the exact full reference for the digest in the log, not a tag
-or the digest from a newer release.
-
-In Bash, paste that full reference at the prompt. For GPU, remove the `#`
-from the line that adds the NVIDIA Compose file.
-
-```bash
-read -r -p 'Full image reference: ' OPENVMS_IMAGE
-export OPENVMS_IMAGE
-compose=(docker compose -f docker-compose.yml -f deploy/compose.ghcr.yml)
-# compose+=(-f deploy/compose.nvidia.yml)
-
-"${compose[@]}" config --quiet
-"${compose[@]}" ps -a
-"${compose[@]}" logs --tail=100 api
-```
-
-To start or recreate services, validate the configuration first. Download
-the images before you run `up`. Use the same Compose command and image
-reference:
-
-```bash
-"${compose[@]}" config --quiet &&
-  "${compose[@]}" pull &&
-  "${compose[@]}" up -d --no-build --pull never
-```
-
-### Local builds for development
-
-Use `docker compose -f docker-compose.yml build` for local development
-only. Do not use a local build to maintain a GHCR installation.
 
 ## Known limitations
 
