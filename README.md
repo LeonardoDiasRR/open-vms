@@ -48,11 +48,11 @@ PostgreSQL, Nginx, and MediaMTX from Docker Hub. It does not compile
 OpenVMS or require a GHCR login.
 
 1. Select a Git branch or tag that contains `deploy/images.env`.
-   The `fix/install-prebuilt-ghcr` branch contains the image installer.
+   The `main` branch contains the image installer.
 2. Download the installer outside the installation directory. Use Bash.
 
    ```bash
-   ref=fix/install-prebuilt-ghcr
+   ref=main
    curl -fsSL -o openvms-install.sh "https://raw.githubusercontent.com/LeonardoDiasRR/open-vms/$ref/install.sh"
    ```
 
