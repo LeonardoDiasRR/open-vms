@@ -7,7 +7,23 @@ on:
       - .github/workflows/installer.yml
       - .dockerignore
       - Dockerfile
+      - Dockerfile.ghcr
       - docker-compose.yml
+      - conf/config.yaml
+      - 'deploy/**'
+      - install.sh
+      - scripts/install-ffmpeg.sh
+      - 'scripts/test-install*.sh'
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/installer.yml
+      - .dockerignore
+      - Dockerfile
+      - Dockerfile.ghcr
+      - docker-compose.yml
+      - conf/config.yaml
+      - 'deploy/**'
       - install.sh
       - scripts/install-ffmpeg.sh
       - 'scripts/test-install*.sh'
@@ -19,61 +35,42 @@ permissions:
 jobs:
   recovery:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Test the installer and retry logic
+      - name: Test the installer and FFmpeg retry logic
         run: |
+          for script in install.sh scripts/install-ffmpeg.sh scripts/test-install*.sh; do bash -n "$script"; done
+          shellcheck install.sh scripts/install-ffmpeg.sh scripts/test-install*.sh
           bash scripts/test-install.sh
           bash scripts/test-install-ffmpeg.sh
-      - name: Test recovery after a build with no network
+      - name: Verify anonymous GHCR installation and pull recovery on a clean daemon
+        timeout-minutes: 42
         shell: bash
         run: |
           set -euo pipefail
-          scratch=$(mktemp -d "$RUNNER_TEMP/openvms.XXXXXXXX")
-          export XDG_STATE_HOME="$scratch/state"
-          export OPENVMS_INSTALL_DIR="$scratch/app"
-          export OPENVMS_BUILD_TIMEOUT=600 OPENVMS_START_TIMEOUT=300 OPENVMS_HEALTH_TIMEOUT=180
-          git clone --local "$GITHUB_WORKSPACE" "$OPENVMS_INSTALL_DIR"
-          cd "$OPENVMS_INSTALL_DIR"
-          git remote set-url origin https://github.com/LeonardoDiasRR/open-vms.git
-          bash install.sh
-
-          cp -p .env "$scratch/env.before"
-          printf 'keep this recording\n' > archive/recovery.fixture
-          pg_before=$(docker compose ps -q postgres)
-          test -n "$pg_before"
-          docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U postgres -d openvms \
-            -c "CREATE TABLE install_recovery (value text); INSERT INTO install_recovery VALUES ('keep this row');"
-
-          cat > "$scratch/offline.yml" <<'YAML'
-          services:
-            api:
-              build:
-                target: ffmpeg
-                no_cache: true
-                network: none
-          YAML
-          rc=0
-          COMPOSE_FILE="docker-compose.yml:$scratch/offline.yml" bash install.sh > "$scratch/failure.txt" 2>&1 || rc=$?
-          cat "$scratch/failure.txt"
-          test "$rc" -ne 0
-          grep -F 'Instalando ffmpeg (tentativa 1/2' "$scratch/failure.txt"
-          grep -F 'Instalando ffmpeg (tentativa 2/2' "$scratch/failure.txt"
-          grep -F 'Não foi possível instalar o ffmpeg' "$scratch/failure.txt"
-          grep -F 'Construção das imagens falhou (código ' "$scratch/failure.txt"
-          ! grep -F 'Inicialização dos serviços (limite:' "$scratch/failure.txt" || exit 1
-          failure_log=$(sed -n 's/^Log: //p' "$scratch/failure.txt")
-          test "$(stat -c %a "$failure_log")" = 600
-          grep -F 'Construção das imagens falhou' "$failure_log"
-
-          bash install.sh
-          cmp .env "$scratch/env.before"
-          test "$(< archive/recovery.fixture)" = 'keep this recording'
-          test "$(docker compose ps -q postgres)" = "$pg_before"
-          test "$(docker compose exec -T postgres psql -At -U postgres -d openvms -c 'SELECT value FROM install_recovery;')" = 'keep this row'
-          curl -fsS http://127.0.0.1:7101/api/v1/health
-          curl -fsS -o /dev/null http://127.0.0.1:7102/
-          printf '\nPASS: recovery kept the environment, database row and recording file.\n'
+          # The installer uses host networking and fixed names. Keep both the Docker store
+          # and the services' loopback in DinD; never mount the runner's Docker socket.
+          dind=$(docker run --detach --privileged --env DOCKER_TLS_CERTDIR= --volume "$GITHUB_WORKSPACE:/src:ro" \
+            docker:29-dind --host=unix:///var/run/docker.sock)
+          cleanup() {
+            local rc=$?
+            trap - EXIT
+            if (( rc != 0 )); then timeout 20s docker logs --tail 100 "$dind" >&2 || true; fi
+            timeout 30s docker rm --force --volumes "$dind" || rc=1
+            exit "$rc"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          deadline=$((SECONDS + 90))
+          until timeout 5s docker exec "$dind" docker info >/dev/null 2>&1; do
+            if (( SECONDS >= deadline )); then printf 'DinD did not start in time\n' >&2; exit 1; fi
+            sleep 1
+          done
+          timeout 120s docker exec "$dind" apk add --no-cache bash coreutils curl iproute2 python3
+          timeout --kill-after=10s 36m docker exec --env OPENVMS_E2E_ISOLATED=1 "$dind" \
+            bash /src/scripts/test-install-ghcr.sh /src
