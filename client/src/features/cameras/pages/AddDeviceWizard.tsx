@@ -85,6 +85,10 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   useEffect(() => {
     if (job?.state !== 'running' || !job.id) return undefined;
     const id = job.id;
+    // review 2026-11-27: a cleanup marca este efeito como MORTO. Respostas de request antigas sao
+    // obsoletas: um 'running' que chega depois de um 'done' (tick lento sobreposto) reacenderia um
+    // scan que o servidor ja encerrou e o polling nunca mais pararia.
+    let cancelled = false;
     const tick = async () => {
       // 2026-11-27: nao existe limite de tempo aqui. A conta anterior misturava o relogio do
       // navegador com o started_ts do servidor e estourava no primeiro tick quando os dois diferiam
@@ -93,13 +97,18 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
       // (server/api/devices.js), e a faixa tem teto de 1024 IPs com timeout proprio por sonda.
       try {
         const s = await api.scanStatus(id);
-        await loadResults(id);
-        setJob(s); setError(null);
-        if (s.state === 'error') setError(s.error || t('errors.scan_failed'));
-      } catch (e) { setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
+        if (cancelled) return; // efeito morto: conclusao obsoleta, descarta
+        // o state que fecha o scan nao pode depender do request SEPARADO das results: se ele cair,
+        // done/error precisa valer mesmo assim (a tabela segue vazia e o aviso diz por que)
+        let aviso: string | null = null;
+        try { await loadResults(id); } catch (e) { aviso = `warning: ${errorMessage(e, t('errors.action_failed'))}`; }
+        if (cancelled) return;
+        setJob(s);
+        setError(s.state === 'error' ? (s.error || t('errors.scan_failed')) : aviso);
+      } catch (e) { if (!cancelled) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
     };
     const timer = setInterval(tick, 2000);
-    return () => clearInterval(timer);
+    return () => { cancelled = true; clearInterval(timer); };
   }, [job, api, t]);
 
   // "Known address" tab: NX probes the address; here the probe is the same scan, with 1 IP and the

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LanguageProvider } from '@/shared/i18n';
 import AddDeviceWizard from './AddDeviceWizard';
@@ -346,16 +346,23 @@ describe('AddDeviceWizard: busca com URL de canal envia scope.source', () => {
 // estourava, apagava o job e a tabela ficava vazia embora o servidor tivesse sete cameras. O
 // servidor devolve started_ts deslocado de proposito: o wizard nao deve mais ler esse campo.
 const SKEW_MS = 6 * 60 * 1000;
+// pega o setTimeout VERDADEIRO no import (antes de qualquer useFakeTimers): serve para ceder
+// macrotasks reais enquanto os timers do teste estao fake — o React precisa deles para renderizar
+// um setJob que chegou fora do act (scheduler + passive effects = varios macrotasks)
+const realSetTimeout = setTimeout;
 const CAMERA_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554], status: 'rtsp', scan_id: 's1', outcome: 'pending' };
 
-function openSubnetScan(status: () => { id: string; state: string; started_ts: string }) {
+type ScanStatus = { id: string; state: string; started_ts: string };
+
+function openSubnetScan(status: () => ScanStatus | Promise<ScanStatus>,
+  results: () => unknown[] = () => [CAMERA_ROW]) {
   const apiSkew = {
     startScan: async () => ({
       scan_id: 's1', state: 'running',
       started_ts: new Date(Date.now() - SKEW_MS).toISOString(),
     }),
     scanStatus: async () => status(),
-    discoveryResults: async () => [CAMERA_ROW],
+    discoveryResults: async () => results(),
     addCamera: async () => ({ id: 'c1', name: 'C', state: 'provisioning', profile_ids: [] }),
     deviceChannels: async () => ({ multichannel: false, sources: 1, channels: [] }),
   };
@@ -367,6 +374,10 @@ function openSubnetScan(status: () => { id: string; state: string; started_ts: s
 }
 
 describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
+  // REVIEW 2026-11-27 (3): se uma assercao falhar no meio, so o useRealTimers do fim nao roda — o
+  // teardown devolve os timers reais para o proximo teste do arquivo nao herdar o relogio fake.
+  afterEach(() => vi.useRealTimers());
+
   it('mostra a camera encontrada mesmo com o servidor seis minutos atras', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     openSubnetScan(() => ({ id: 's1', state: 'done', started_ts: '' }));
@@ -388,4 +399,47 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     expect(calls).toBeGreaterThan(before);   // o polling continua vivo: quem encerra o scan e o servidor
     vi.useRealTimers();
   });
+
+  // REVIEW 2026-11-27 (1): o state terminal NAO pode depender do request separado das results.
+  // Antes, um done do servidor com a busca de results quebrada caia no catch, o job ficava
+  // 'running' para sempre e o polling nunca parava.
+  it('fecha o scan em done mesmo com a busca de results quebrada e para o polling', async () => {
+    let calls = 0;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    openSubnetScan(
+      () => { calls += 1; return { id: 's1', state: 'done', started_ts: '' }; },
+      () => { throw new Error('results 500'); },
+    );
+    await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });      // primeiro tick aplicado
+    expect(screen.getByText(/warning: results 500/)).toBeInTheDocument(); // a falha aparece como aviso
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBe(1);                       // done fechou o scan: a queda das results nao rearma o polling
+    vi.useRealTimers();
+  }, 15_000);
+
+  // REVIEW 2026-11-27 (2): a resposta LENTA do tick 1 so chega depois que o tick 2 ja aplicou o done
+  // e o efeito foi desmontado. Essa conclusao atrasada e obsoleta: aplicar 'running' aqui reacenderia
+  // um scan que o servidor encerrou (polling + Scan desabilitado de novo, para sempre).
+  it('a resposta atrasada com running nao reativa um scan que o servidor ja encerrou', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let calls = 0;
+    let serverClosed = false;
+    let resolveSlow: (v: ScanStatus) => void = () => {};
+    const slowRunning = new Promise<ScanStatus>((r) => { resolveSlow = r; });
+    openSubnetScan(() => {
+      calls += 1;
+      if (calls === 1) return slowRunning;       // sonda lenta: a resposta chega depois do done
+      return { id: 's1', state: serverClosed ? 'done' : 'running', started_ts: '' };
+    });
+    await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
+    serverClosed = true;                          // o servidor encerra; o tick 2 ve 'done' e desliga o efeito
+    await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
+    expect(calls).toBe(2);
+    resolveSlow({ id: 's1', state: 'running', started_ts: '' }); // a conclusao obsoleta chega AGORA
+    await new Promise((r) => realSetTimeout(r, 20)); // macrotasks REAIS: o React aplica o setJob obsoleto e o efeito fantasma monta o setInterval
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBe(2);                         // descartada: o scan continua fechado
+    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
 });
