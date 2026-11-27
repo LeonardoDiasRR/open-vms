@@ -355,7 +355,7 @@ const CAMERA_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554],
 type ScanStatus = { id: string; state: string; started_ts: string };
 
 function openSubnetScan(status: () => ScanStatus | Promise<ScanStatus>,
-  results: () => unknown[] = () => [CAMERA_ROW]) {
+  results: () => unknown[] | Promise<unknown[]> = () => [CAMERA_ROW]) {
   const apiSkew = {
     startScan: async () => ({
       scan_id: 's1', state: 'running',
@@ -439,6 +439,62 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     await new Promise((r) => realSetTimeout(r, 20)); // macrotasks REAIS: o React aplica o setJob obsoleto e o efeito fantasma monta o setInterval
     await vi.advanceTimersByTimeAsync(20_000);
     expect(calls).toBe(2);                         // descartada: o scan continua fechado
+    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
+
+  // REVIEW ROUND 2 (1): o done tem de valer ANTES de esperar as results. Com a request das results
+  // pendurada PARA SEMPRE (servidor travado), o state terminal atrasado deixava o scan em 'running'
+  // por baixo: o polling continuava pedindo status e o Scan seguia desabilitado.
+  it('um done do servidor fecha o scan mesmo com a request de results pendurada para sempre', async () => {
+    let calls = 0;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    openSubnetScan(
+      () => { calls += 1; return { id: 's1', state: 'done', started_ts: '' }; },
+      () => new Promise(() => {}),                 // as results NUNCA resolvem
+    );
+    await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
+    await new Promise((r) => realSetTimeout(r, 20));            // commit do state num macrotask real
+    expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled(); // done aplicado: Scan reabilitado
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBe(1);                                       // a request pendurada nao rearma o polling
+    vi.useRealTimers();
+  }, 15_000);
+
+  // REVIEW ROUND 2 (2): a janela entre a RESPOSTA done e o RENDER do state terminal. 'cancelled' so
+  // existe depois da cleanup (que roda no commit); um 'running' obsoleto que resolve nessa janela
+  // passava por ela e, aplicado por ultimo, VENCE o batch do React: running ganha e o scan reacende.
+  it('o running obsoleto que chega entre a resposta done e o commit terminal nao reaceso o scan', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let calls = 0;
+    let tick2WaitingResults = false;
+    let releaseTick2Results: (rows: unknown[]) => void = () => {};
+    const tick2Results = new Promise<unknown[]>((r) => { releaseTick2Results = r; });
+    let resolveSlow: (v: ScanStatus) => void = () => {};
+    const slowRunning = new Promise<ScanStatus>((r) => { resolveSlow = r; });
+    openSubnetScan(
+      () => {
+        calls += 1;
+        if (calls === 1) return slowRunning;       // tick 1: sonda lenta, resposta so depois do done
+        return { id: 's1', state: 'done', started_ts: '' }; // tick 2: o servidor encerrou o scan
+      },
+      () => {
+        // as results do tick 2 ficam na mao: e a alavanca que poe o running obsoleto exatamente na
+        // janela entre a resposta done (microtask) e o commit do terminal (macrotask)
+        if (calls >= 2) { tick2WaitingResults = true; return tick2Results; }
+        return [CAMERA_ROW];
+      },
+    );
+    await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
+    await vi.advanceTimersByTimeAsync(2000);       // tick 2 (fake 4 s) ve o done
+    expect(tick2WaitingResults).toBe(true);        // ... e ainda espera as results
+    // ordem deterministica da janela: as results do done liberam o setJob(done) no microtask e o
+    // running obsoleto entra no MESMO macrotask, antes de qualquer commit
+    releaseTick2Results([CAMERA_ROW]);
+    resolveSlow({ id: 's1', state: 'running', started_ts: '' });
+    await new Promise((r) => realSetTimeout(r, 20));            // commit dos dois updates
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBe(2);                                       // o obsoleto foi descartado: nada reaceso
     expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
     vi.useRealTimers();
   }, 15_000);

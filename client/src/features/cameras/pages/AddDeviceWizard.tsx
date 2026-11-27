@@ -85,27 +85,37 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   useEffect(() => {
     if (job?.state !== 'running' || !job.id) return undefined;
     const id = job.id;
-    // review 2026-11-27: a cleanup marca este efeito como MORTO. Respostas de request antigas sao
-    // obsoletas: um 'running' que chega depois de um 'done' (tick lento sobreposto) reacenderia um
-    // scan que o servidor ja encerrou e o polling nunca mais pararia.
+    // review 2026-11-27: cancelled = efeito morto (cleanup); stopped = scan fechado visto pelo PROPRIO
+    // efeito. Os dois descartam conclusoes obsoletas: o 'running' lento que chega depois de um 'done'
+    // reacenderia um scan que o servidor encerrou. O stopped e setado SINCRONICAMENTE quando o state
+    // terminal e visto — cobre a janela entre a resposta done e o commit, onde cancelled ainda nao existe.
     let cancelled = false;
+    let stopped = false;
     const tick = async () => {
       // 2026-11-27: nao existe limite de tempo aqui. A conta anterior misturava o relogio do
       // navegador com o started_ts do servidor e estourava no primeiro tick quando os dois diferiam
       // mais que 60 s, apagando uma varredura que o servidor ja tinha concluido. Quem encerra o
       // scan e o state que o servidor devolve: runScan fecha em 'done' ou 'error' em todo caminho
       // (server/api/devices.js), e a faixa tem teto de 1024 IPs com timeout proprio por sonda.
+      if (stopped) return; // scan ja fechado neste efeito: nenhum tick comeca
       try {
         const s = await api.scanStatus(id);
-        if (cancelled) return; // efeito morto: conclusao obsoleta, descarta
-        // o state que fecha o scan nao pode depender do request SEPARADO das results: se ele cair,
-        // done/error precisa valer mesmo assim (a tabela segue vazia e o aviso diz por que)
+        if (cancelled || stopped) return; // conclusao obsoleta: scan fechado, descarta
+        if (s.state !== 'running') {
+          // review round 2: o state terminal vale NA MESMA hora, antes de esperar as results (o
+          // request separado pode travar para sempre) e com stopped fechado para ticks obsoletos
+          stopped = true;
+          setJob(s);
+          setError(s.state === 'error' ? (s.error || t('errors.scan_failed')) : null);
+        }
+        // as results continuam best-effort: se cairem, o aviso diz por que; se pendurarem, o state
+        // terminal ja foi aplicado e nada depende delas
         let aviso: string | null = null;
         try { await loadResults(id); } catch (e) { aviso = `warning: ${errorMessage(e, t('errors.action_failed'))}`; }
         if (cancelled) return;
-        setJob(s);
-        setError(s.state === 'error' ? (s.error || t('errors.scan_failed')) : aviso);
-      } catch (e) { if (!cancelled) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
+        if (s.state === 'running') { if (!stopped) { setJob(s); setError(aviso); } }
+        else if (aviso && s.state !== 'error') setError(aviso);
+      } catch (e) { if (!cancelled && !stopped) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
     };
     const timer = setInterval(tick, 2000);
     return () => { cancelled = true; clearInterval(timer); };
