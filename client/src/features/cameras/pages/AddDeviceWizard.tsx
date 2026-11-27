@@ -55,6 +55,10 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   // is stale and must not show/select A's devices inside B (effect cleanup cannot guard this — the
   // fetch outlives the effect that started it)
   const scanOwner = useRef<string | null>(null);
+  // review final (F1): duas requests do MESMO scan ainda competem — quem escreve e a ordem de
+  // EMISSAO (seq crescente, carimbada no inicio do fetch): o snapshot 'running' emitido antes que
+  // volta depois do snapshot final nao pode apagar a tabela (last-writer-wins por emissao)
+  const resultsSeq = useRef(0);
   const [results, setResults] = useState<Discovery[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -85,8 +89,10 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
 
   // ponytail: the server keeps EVERY discovery of the instance; the table shows only the current scan
   const loadResults = async (id: string | null) => {
+    const seq = ++resultsSeq.current;
     const rows = resultsForScan(await api.discoveryResults(), id);
-    if (scanOwner.current === id) setResults(rows); // um scan mais novo e o response e velho: nao escreve
+    // um scan mais novo e o response e velho: nao escreve; e dentro do scan so o ULTIMO emitido vale (F1)
+    if (scanOwner.current === id && resultsSeq.current === seq) setResults(rows);
   };
 
   // (c1) async scan poll: every tick swaps the job object and the effect restarts the timer
@@ -99,15 +105,18 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
     // terminal e visto — cobre a janela entre a resposta done e o commit, onde cancelled ainda nao existe.
     let cancelled = false;
     let stopped = false;
+    let busy = false; // review final (F3): um ciclo de polling por vez; sem o cap de 60 s o acumulo de requests stalled nao teria limite
     const tick = async () => {
       // 2026-11-27: nao existe limite de tempo aqui. A conta anterior misturava o relogio do
       // navegador com o started_ts do servidor e estourava no primeiro tick quando os dois diferiam
       // mais que 60 s, apagando uma varredura que o servidor ja tinha concluido. Quem encerra o
       // scan e o state que o servidor devolve: runScan fecha em 'done' ou 'error' em todo caminho
       // (server/api/devices.js), e a faixa tem teto de 1024 IPs com timeout proprio por sonda.
-      if (stopped) return; // scan ja fechado neste efeito: nenhum tick comeca
+      if (stopped || busy) return; // scan ja fechado neste efeito, ou o status do ciclo anterior ainda em voo (F3)
+      busy = true;
       try {
         const s = await api.scanStatus(id);
+        busy = false; // F3: um request de status por vez; a fase de results segue ordenada por emissor (F1)
         if (cancelled || stopped) return; // conclusao obsoleta: scan fechado, descarta
         if (s.state !== 'running') {
           // review round 2: o state terminal vale NA MESMA hora, antes de esperar as results (o
@@ -120,10 +129,13 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
         // terminal ja foi aplicado e nada depende delas
         let aviso: string | null = null;
         try { await loadResults(id); } catch (e) { aviso = `warning: ${errorMessage(e, t('errors.action_failed'))}`; }
+        // review final (F2): o aviso da request de results pertence ao SCAN ATUAL, nao ao efeito — a
+        // request final pode falar depois do done ter desmontado o efeito. Nunca encobre o erro de
+        // scan do servidor e nunca reabre polling (o setJob do estado terminal ja foi feito)
+        if (scanOwner.current === id && s.state !== 'error') setError(aviso);
         if (cancelled) return;
-        if (s.state === 'running') { if (!stopped) { setJob(s); setError(aviso); } }
-        else if (aviso && s.state !== 'error') setError(aviso);
-      } catch (e) { if (!cancelled && !stopped) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
+        if (s.state === 'running' && !stopped) setJob(s);
+      } catch (e) { busy = false; if (!cancelled && !stopped) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
     };
     const timer = setInterval(tick, 2000);
     return () => { cancelled = true; clearInterval(timer); };

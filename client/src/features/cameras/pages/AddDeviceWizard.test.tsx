@@ -352,7 +352,7 @@ const SKEW_MS = 6 * 60 * 1000;
 const realSetTimeout = setTimeout;
 const CAMERA_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554], status: 'rtsp', scan_id: 's1', outcome: 'pending' };
 
-type ScanStatus = { id: string; state: string; started_ts: string };
+type ScanStatus = { id: string; state: string; started_ts: string; error?: string };
 
 function openSubnetScan(status: () => ScanStatus | Promise<ScanStatus>,
   results: () => unknown[] | Promise<unknown[]> = () => [CAMERA_ROW]) {
@@ -389,7 +389,10 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
   it('depois de dois minutos de scan lento segue esperando, sem aviso e sem esvaziar a tabela', async () => {
     let calls = 0;
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    openSubnetScan(() => { calls += 1; return { id: 's1', state: 'running', started_ts: '' }; });
+    // M1 (review final): started_ts valido SEM skew — se alguem reintroduzir um corte de 60 s,
+    // Date.now() - Date.parse(VALID_TS) passa de 60000 durante os 122 s de scan e este teste pega.
+    const VALID_TS = new Date().toISOString();
+    openSubnetScan(() => { calls += 1; return { id: 's1', state: 'running', started_ts: VALID_TS }; });
     await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
     await vi.advanceTimersByTimeAsync(122_000);
     expect(screen.queryByText(/took too long|demorou demais/i)).not.toBeInTheDocument();
@@ -403,24 +406,35 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
   // REVIEW 2026-11-27 (1): o state terminal NAO pode depender do request separado das results.
   // Antes, um done do servidor com a busca de results quebrada caia no catch, o job ficava
   // 'running' para sempre e o polling nunca parava.
+  // REVIEW FINAL (F2): a request de results agora quebra DEPOIS de o done ter sido renderizado
+  // (efeito de polling ja desmontado) — o aviso do scan atual e devido mesmo sem o efeito.
   it('fecha o scan em done mesmo com a busca de results quebrada e para o polling', async () => {
     let calls = 0;
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    let rejectResults: (e: unknown) => void = () => {};
     openSubnetScan(
       () => { calls += 1; return { id: 's1', state: 'done', started_ts: '' }; },
-      () => { throw new Error('results 500'); },
+      () => new Promise((_res, rej) => { rejectResults = rej; }), // a FINAL request so quebra depois do done
     );
     await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });      // primeiro tick aplicado
-    expect(screen.getByText(/warning: results 500/)).toBeInTheDocument(); // a falha aparece como aviso
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled(), { timeout: 3000 }); // done renderizado: efeito desmontado
+    expect(screen.queryByText(/warning: results 500/)).not.toBeInTheDocument(); // a request ainda nao falou
+    rejectResults(new Error('results 500'));                             // a request da tabela fala DEPOIS do done
+    await new Promise((r) => realSetTimeout(r, 20));                     // macrotask real: o aviso, se vier, aparece
+    expect(screen.getByText(/warning: results 500/)).toBeInTheDocument(); // F2: aviso do scan atual vale sem o efeito
     await vi.advanceTimersByTimeAsync(20_000);
     expect(calls).toBe(1);                       // done fechou o scan: a queda das results nao rearma o polling
     vi.useRealTimers();
   }, 15_000);
 
-  // REVIEW 2026-11-27 (2): a resposta LENTA do tick 1 so chega depois que o tick 2 ja aplicou o done
-  // e o efeito foi desmontado. Essa conclusao atrasada e obsoleta: aplicar 'running' aqui reacenderia
-  // um scan que o servidor encerrou (polling + Scan desabilitado de novo, para sempre).
-  it('a resposta atrasada com running nao reativa um scan que o servidor ja encerrou', async () => {
+  // REVIEW FINAL (F3): um ciclo de polling por vez — com o status em voo o intervalo NAO emite
+  // novos scanStatus (sem o cap de 60 s o acumulo de requests stalled nao teria limite). O
+  // 'running' dessa request lenta, quando enfim chega, ainda encontra o scan vivo e e aplicado sem
+  // efeito danoso; o tick seguinte ve o done do servidor e o polling morre sozinho — nada e
+  // reaceso. (As variantes de conclusao obsoleta sobreposta dos rounds 1-3 foram absorvidas por
+  // este teste: com um ciclo por vez a sobreposicao de status — origem daquele cenario — nao pode
+  // mais existir; 'stopped'/'cancelled' seguem como defesa em profundidade.)
+  it('um status em voo nao emite scanStatus extras e o running atrasado nao reaceso o scan', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let calls = 0;
     let serverClosed = false;
@@ -428,17 +442,19 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     const slowRunning = new Promise<ScanStatus>((r) => { resolveSlow = r; });
     openSubnetScan(() => {
       calls += 1;
-      if (calls === 1) return slowRunning;       // sonda lenta: a resposta chega depois do done
+      if (calls === 1) return slowRunning;         // sonda em voo pela janela inteira
       return { id: 's1', state: serverClosed ? 'done' : 'running', started_ts: '' };
     });
     await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
-    serverClosed = true;                          // o servidor encerra; o tick 2 ve 'done' e desliga o efeito
+    await vi.advanceTimersByTimeAsync(8_000);      // 4 janelas de intervalo com o status em voo
+    expect(calls).toBe(1);                         // F3: nenhum scanStatus extra enquanto o anterior nao volta
+    serverClosed = true;                           // o servidor fecha o scan (o cliente ainda nao sabe)
+    resolveSlow({ id: 's1', state: 'running', started_ts: '' }); // a request lenta enfim volta
+    await vi.advanceTimersByTimeAsync(2_500);      // tick seguinte ve o done e desliga o polling
     await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
-    expect(calls).toBe(2);
-    resolveSlow({ id: 's1', state: 'running', started_ts: '' }); // a conclusao obsoleta chega AGORA
-    await new Promise((r) => realSetTimeout(r, 20)); // macrotasks REAIS: o React aplica o setJob obsoleto e o efeito fantasma monta o setInterval
+    const settled = calls;
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(calls).toBe(2);                         // descartada: o scan continua fechado
+    expect(calls).toBe(settled);                   // nada reaceso: quem encerra o scan e o state do servidor
     expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
     vi.useRealTimers();
   }, 15_000);
@@ -461,40 +477,29 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     vi.useRealTimers();
   }, 15_000);
 
-  // REVIEW ROUND 2 (2) + ROUND 3 (OPEN 1): a janela entre a RESPOSTA done e o RENDER do state
-  // terminal. 'cancelled' so existe depois da cleanup, que roda no commit; o 'running' obsoleto que
-  // resolve ANTES de qualquer commit passa por ela e, aplicado por ultimo, VENCE o batch do React:
-  // running ganha e o scan reacende. O obsoleto e liberado SINCRONAMENTE dentro da chamada de
-  // results do tick do done — o MESMO macrotask da resposta done, onde commit/cleanup nao podem
-  // existir: quem descarta o obsoleto so pode ser a flag sincronica (stopped).
-  it('o running obsoleto que chega entre a resposta done e o commit terminal nao reaceso o scan', async () => {
+  // REVIEW FINAL (F1): scanOwner protege de OUTRO scan, mas duas requests do MESMO scan ainda
+  // competem: o snapshot do tick 'running' (emissao antiga) pode voltar depois do snapshot FINAL
+  // renderizado e apagar a tabela para sempre (o mesmo vale para o reload do addSelected). A
+  // escrita vale por scan + ORDEM DE EMISSAO (seq crescente): ultimo que foi emitido ganha, nao o
+  // ultimo que chegou. (A janela obsoleta do round 2/3 exigia dois status sobrepostos — o F3 a
+  // eliminou na origem; ver o teste 'um status em voo nao emite scanStatus extras'.)
+  it('um snapshot running atrasado do mesmo scan nao apaga a tabela depois do resultado final', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    let calls = 0;
-    let staleReleased = false;
-    let resolveSlow: (v: ScanStatus) => void = () => {};
-    const slowRunning = new Promise<ScanStatus>((r) => { resolveSlow = r; });
+    let st = 0;
+    let resultsCalls = 0;
+    let releaseOld: (rows: unknown[]) => void = () => {};
+    const oldSnapshot = new Promise<unknown[]>((r) => { releaseOld = r; });
     openSubnetScan(
-      () => {
-        calls += 1;
-        if (calls === 1) return slowRunning;       // tick 1: sonda lenta, resposta so depois do done
-        return { id: 's1', state: 'done', started_ts: '' }; // tick 2: o servidor encerrou o scan
-      },
-      () => {
-        // results do tick do done: e aqui (sincrono, antes de qualquer await) que o obsoleto entra
-        // na janela — sem nenhum macrotask entre a resposta done e a conclusao atrasada
-        if (calls >= 2 && !staleReleased) {
-          staleReleased = true;
-          resolveSlow({ id: 's1', state: 'running', started_ts: '' });
-        }
-        return [CAMERA_ROW];
-      },
+      () => { st += 1; return { id: 's1', state: st === 1 ? 'running' : 'done', started_ts: '' }; },
+      // tick 'running': snapshot VELHO (vazio) fica em voo; tick 'done': snapshot final na hora
+      () => { resultsCalls += 1; return resultsCalls === 1 ? oldSnapshot : [CAMERA_ROW]; },
     );
-    await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
-    await vi.advanceTimersByTimeAsync(2000);        // tick 2 ve o done; o obsoleto cai na MESMA hora
-    await new Promise((r) => realSetTimeout(r, 20));            // commit dos updates pendentes
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(calls).toBe(2);                                       // o obsoleto foi descartado: nada reaceso
-    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 6000 });
+    expect(resultsCalls).toBe(2);                            // o snapshot velho ainda esta em voo
+    releaseOld([]);                                          // e chega POR ULTIMO, com o scan ja fechado
+    await new Promise((r) => realSetTimeout(r, 20));         // macrotask real: a escrita, se vier, aparece
+    await new Promise((r) => realSetTimeout(r, 20));
+    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(); // a tabela nao foi apagada
     vi.useRealTimers();
   }, 15_000);
 
@@ -540,6 +545,23 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     await new Promise((r) => realSetTimeout(r, 50));
     expect(screen.queryByText('10.69.36.56:554')).not.toBeInTheDocument(); // A jamais escreve na tabela de B
     expect(screen.getByText('10.0.0.9:554')).toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
+
+  // REVIEW FINAL (F2): o aviso da request de results NAO pode encobrir o erro de scan devolvido
+  // pelo servidor — o estado 'error' e a verdade do scan.
+  it('uma results quebrada depois do erro do servidor nao encobre a mensagem de erro do scan', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let rejectResults: (e: unknown) => void = () => {};
+    openSubnetScan(
+      () => ({ id: 's1', state: 'error', error: 'scan exploded', started_ts: '' }),
+      () => new Promise((_res, rej) => { rejectResults = rej; }),
+    );
+    await waitFor(() => expect(screen.getByText(/scan exploded/)).toBeInTheDocument(), { timeout: 4000 }); // erro aplicado na hora
+    rejectResults(new Error('results 500'));                      // a request da tabela fala depois
+    await new Promise((r) => realSetTimeout(r, 20));
+    expect(screen.getByText(/scan exploded/)).toBeInTheDocument(); // erro preservado
+    expect(screen.queryByText(/warning: results 500/)).not.toBeInTheDocument(); // e o aviso nao o encobre
     vi.useRealTimers();
   }, 15_000);
 });
