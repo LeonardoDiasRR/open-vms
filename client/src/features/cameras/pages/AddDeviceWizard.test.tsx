@@ -564,4 +564,138 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     expect(screen.queryByText(/warning: results 500/)).not.toBeInTheDocument(); // e o aviso nao o encobre
     vi.useRealTimers();
   }, 15_000);
+
+  // CONSOLIDACAO (R1a): a escrita do AVISO segue a mesma regra (dono, seq) da tabela. O snapshot
+  // 'running' emitido primeiro volta SUCESSO depois de o request final do scan ter quebrado: como
+  // sucesso ele chamaria setError(null) e apagaria o aviso mais novo. O aviso sobrevive.
+  it('um sucesso de results mais antigo nao apaga o aviso mais novo do scan', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let st = 0;
+    let resultsCalls = 0;
+    let releaseOld: (rows: unknown[]) => void = () => {};
+    const oldSuccess = new Promise<unknown[]>((r) => { releaseOld = r; });
+    openSubnetScan(
+      () => { st += 1; return { id: 's1', state: st === 1 ? 'running' : 'done', started_ts: '' }; },
+      () => { resultsCalls += 1; return resultsCalls === 1 ? oldSuccess : Promise.reject(new Error('results 500')); },
+    );
+    await waitFor(() => expect(screen.getByText(/warning: results 500/)).toBeInTheDocument(), { timeout: 6000 });
+    expect(resultsCalls).toBe(2);                                // o snapshot antigo segue em voo
+    releaseOld([CAMERA_ROW]);                                    // o SUCESSO antigo chega por ultimo
+    await new Promise((r) => realSetTimeout(r, 20));
+    await new Promise((r) => realSetTimeout(r, 20));
+    expect(screen.getByText(/warning: results 500/)).toBeInTheDocument(); // o aviso mais novo sobrevive
+    vi.useRealTimers();
+  }, 15_000);
+
+  // CONSOLIDACAO (R1b): a FALHA do request antigo segue a mesma regra — o snapshot 'running' emitido
+  // primeiro que QUEBRA depois de o servidor ter devolvido 'error' nao pode sobrescrever o erro real
+  // do scan com o seu aviso.
+  it('uma falha de results mais antiga nao sobrescreve o erro de scan do servidor', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let st = 0;
+    let resultsCalls = 0;
+    let rejectOld: (e: unknown) => void = () => {};
+    const oldFailure = new Promise<unknown[]>((_r, rej) => { rejectOld = rej; });
+    openSubnetScan(
+      () => { st += 1; return st === 1 ? { id: 's1', state: 'running', started_ts: '' } : { id: 's1', state: 'error', error: 'scan exploded', started_ts: '' }; },
+      () => { resultsCalls += 1; return resultsCalls === 1 ? oldFailure : []; },
+    );
+    await waitFor(() => expect(screen.getByText(/scan exploded/)).toBeInTheDocument(), { timeout: 6000 }); // erro do servidor na hora
+    expect(resultsCalls).toBe(2);
+    rejectOld(new Error('results 500'));                         // a FALHA antiga chega por ultima
+    await new Promise((r) => realSetTimeout(r, 20));
+    await new Promise((r) => realSetTimeout(r, 20));
+    expect(screen.getByText(/scan exploded/)).toBeInTheDocument();    // o erro do servidor sobrevive
+    expect(screen.queryByText(/warning: results 500/)).not.toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
+
+  // CONSOLIDACAO (R2): os cadeados de em-voo moram no ref, nao no efeito — o restart do MESMO scan
+  // (que acontece a cada 'running' aplicado) com um status em voo nao os reseta: nenhuma request
+  // extra de scanStatus ou de results se acumula pela janela de intervalo.
+  it('um restart do efeito com o status em voo nao acumula requests', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let calls = 0;
+    let resultsCalls = 0;
+    let serverClosed = false;
+    let releaseStatus: (v: ScanStatus) => void = () => {};
+    const heldStatus = new Promise<ScanStatus>((r) => { releaseStatus = r; });
+    let releaseResults: (rows: unknown[]) => void = () => {};
+    const heldResults = new Promise<unknown[]>((r) => { releaseResults = r; });
+    openSubnetScan(
+      () => {
+        calls += 1;
+        if (calls === 2) return heldStatus;                      // o tick 2 fica em voo pela janela inteira
+        return { id: 's1', state: serverClosed ? 'done' : 'running', started_ts: '' };
+      },
+      () => { resultsCalls += 1; return resultsCalls === 1 ? heldResults : [CAMERA_ROW]; },
+    );
+    await waitFor(() => expect(calls).toBe(2), { timeout: 8000 });   // tick 2 em voo com o status (2 ticks de intervalo)
+    releaseResults([CAMERA_ROW]);                                // o tick 1 enfim faz o setJob: efeito REABRE com o status em voo
+    await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
+    await vi.advanceTimersByTimeAsync(8_000);                    // 4 janelas: nenhum tick passa pelo cadeado do ref
+    expect(calls).toBe(2);                                       // nenhum scanStatus novo depois do restart
+    expect(resultsCalls).toBe(1);                                // nem results atras da pendurada
+    serverClosed = true;
+    releaseStatus({ id: 's1', state: 'running', started_ts: '' }); // a em voo volta; o proximo tick ve o done
+    await vi.advanceTimersByTimeAsync(2_500);
+    await waitFor(() => expect(calls).toBe(3), { timeout: 4000 });
+    const settled = calls;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBe(settled);                                 // done fechou: estavel
+    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
+
+  // CONSOLIDACAO (R3): o reload do add e uma escrita como as outras — se o add do scan A terminar
+  // DEPOIS de o scan B ter pego a tabela, o reload nao pode avancar o seq do B (senao a resposta
+  // final do B e descartada e a tabela fica vazia).
+  it('o reload do add do scan A nao descarta os results finais do scan B', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const A_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554], status: 'rtsp', scan_id: 's1', outcome: 'pending' };
+    const B_ROW = { id: '10.0.0.9|554', ip: '10.0.0.9', openPorts: [554], status: 'rtsp', scan_id: 's2', outcome: 'pending' };
+    let started = 0;
+    let bStatus = 0;
+    let resultsCalls = 0;
+    let releaseAdd: () => void = () => {};
+    const addPending = new Promise<{ id: string; name: string; state: string; profile_ids: string[] }>((r) => { releaseAdd = () => r({ id: 'c1', name: 'C', state: 'provisioning', profile_ids: [] }); });
+    let releaseBFinal: (rows: unknown[]) => void = () => {};
+    const bFinal = new Promise<unknown[]>((r) => { releaseBFinal = r; });
+    let bFinalIssued = false;
+    const apiMix = {
+      startScan: async () => { started += 1; return { scan_id: started === 1 ? 's1' : 's2', state: 'running', started_ts: '' }; },
+      scanStatus: async () => {
+        if (started === 1) return { id: 's1', state: 'done', started_ts: '' };   // A fecha no tick 1
+        bStatus += 1;
+        return { id: 's2', state: bStatus === 1 ? 'running' : 'done', started_ts: '' }; // B fecha no tick 2
+      },
+      discoveryResults: async () => {
+        resultsCalls += 1;
+        if (resultsCalls === 1) return [A_ROW];                  // a final do A
+        if (resultsCalls === 2) return [];                       // B 'running': ainda sem nada
+        bFinalIssued = true; return bFinal;                      // a FINAL do B fica em voo
+      },
+      addCamera: () => addPending,                               // o add trava no POST
+      deviceChannels: async () => ({ multichannel: false, sources: 1, channels: [] }),
+    };
+    renderWizard(<AddDeviceWizard api={apiMix as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Subnet scan' }));
+    fireEvent.change(screen.getByLabelText('First IP'), { target: { value: '10.69.36.50' } });
+    fireEvent.change(screen.getByLabelText('Last IP'), { target: { value: '10.69.36.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }));    // scan A
+    const checkbox = await screen.findByLabelText('Select 10.69.36.56', {}, { timeout: 6000 }); // linha final do A
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: /^Add \d/ })); // add trava no addCamera
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }));    // B pega a tabela com o add em voo
+    await waitFor(() => expect(bFinalIssued).toBe(true), { timeout: 6000 }); // a final do B esta em voo
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled(), { timeout: 3000 }); // B fechou (done)
+    releaseAdd();                                                // o add do A enfim acaba: o reload do A fala
+    await new Promise((r) => realSetTimeout(r, 50));
+    releaseBFinal([B_ROW]);                                      // a resposta final do B chega
+    await new Promise((r) => realSetTimeout(r, 50));
+    await new Promise((r) => realSetTimeout(r, 50));
+    expect(screen.getByText('10.0.0.9:554')).toBeInTheDocument();     // a tabela do B intacta
+    expect(screen.queryByText('10.69.36.56:554')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
 });

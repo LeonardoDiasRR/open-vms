@@ -50,15 +50,15 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   const [job, setJob] = useState<ScanJob | null>(null);
   // ponytail: only the CURRENT scan fills the table; the server catalog is never listed raw
   const [scanId, setScanId] = useState<string | null>(null);
-  // review round 3: the scan that OWNS the table. The results write lands only while the id it was
-  // fetched for is still the current scan: the final response of scan A arriving after scan B started
-  // is stale and must not show/select A's devices inside B (effect cleanup cannot guard this — the
-  // fetch outlives the effect that started it)
-  const scanOwner = useRef<string | null>(null);
-  // review final (F1): duas requests do MESMO scan ainda competem — quem escreve e a ordem de
-  // EMISSAO (seq crescente, carimbada no inicio do fetch): o snapshot 'running' emitido antes que
-  // volta depois do snapshot final nao pode apagar a tabela (last-writer-wins por emissao)
-  const resultsSeq = useRef(0);
+  // consolidacao review 2026-11-27: UM estado do scan no ref, vivo entre restarts do efeito (a
+  // cleanup do efeito nao cobre requests que sobrevivem a ele). owner = o scan cujas escritas valem
+  // na tabela; seq = a ultima request EMITIDA — a escrita (tabela E aviso) so vale para o emissor
+  // que ainda e dono E mais recente (ganha a ordem de EMISSAO, nao a de chegada; nao-dono nao
+  // emite nem avanca o seq). statusInFlight/resultsInFlight = uma request de cada por vez (sem o
+  // cap de 60 s o acumulo de requests stalled nao teria limite); no ref porque um restart do MESMO
+  // scan nao pode resetar o cadeado. terminalError = o erro visivel e o do servidor: nenhuma
+  // escrita de results o toca.
+  const poll = useRef({ owner: null as string | null, seq: 0, statusInFlight: false, resultsInFlight: false, terminalError: false });
   const [results, setResults] = useState<Discovery[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -89,53 +89,66 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
 
   // ponytail: the server keeps EVERY discovery of the instance; the table shows only the current scan
   const loadResults = async (id: string | null) => {
-    const seq = ++resultsSeq.current;
-    const rows = resultsForScan(await api.discoveryResults(), id);
-    // um scan mais novo e o response e velho: nao escreve; e dentro do scan so o ULTIMO emitido vale (F1)
-    if (scanOwner.current === id && resultsSeq.current === seq) setResults(rows);
+    const p = poll.current;
+    if (p.owner !== id) return; // nao-dono: nem emite (nao avanca o seq da tabela — reload de scan morto)
+    const seq = ++p.seq;
+    const mine = () => p.owner === id && p.seq === seq; // ainda e o dono E a emissao mais recente
+    p.resultsInFlight = true;
+    try {
+      const rows = resultsForScan(await api.discoveryResults(), id);
+      if (mine()) { setResults(rows); if (!p.terminalError) setError(null); } // o sucesso limpa o aviso do proprio scan
+    } catch (e) {
+      // F2: o aviso pertence ao (dono, seq) do SCAN, nao ao efeito — a request final pode falar
+      // depois de o done ter desmontado o efeito; e nunca toca no erro de scan do servidor
+      if (mine() && !p.terminalError) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`);
+    } finally {
+      if (p.owner === id) p.resultsInFlight = false;
+    }
+  };
+
+  // o novo scan assume a tabela: dono, seq superior a qualquer request anterior e cadeados zerados
+  const takeTable = (id: string) => {
+    const p = poll.current;
+    p.owner = id; p.seq += 1; p.statusInFlight = false; p.resultsInFlight = false; p.terminalError = false;
   };
 
   // (c1) async scan poll: every tick swaps the job object and the effect restarts the timer
   useEffect(() => {
     if (job?.state !== 'running' || !job.id) return undefined;
     const id = job.id;
-    // review 2026-11-27: cancelled = efeito morto (cleanup); stopped = scan fechado visto pelo PROPRIO
-    // efeito. Os dois descartam conclusoes obsoletas: o 'running' lento que chega depois de um 'done'
-    // reacenderia um scan que o servidor encerrou. O stopped e setado SINCRONICAMENTE quando o state
-    // terminal e visto — cobre a janela entre a resposta done e o commit, onde cancelled ainda nao existe.
+    const p = poll.current;
+    // cancelled = efeito morto (cleanup); stopped = scan fechado visto pelo PROPRIO efeito, na MESMA
+    // hora da resposta terminal — cobre a janela entre a resposta e o commit, onde cancelled ainda nao
+    // existe. A tabela e o aviso ja nao pertencem ao efeito: o (dono, seq) do poll os guarda depois.
     let cancelled = false;
     let stopped = false;
-    let busy = false; // review final (F3): um ciclo de polling por vez; sem o cap de 60 s o acumulo de requests stalled nao teria limite
     const tick = async () => {
       // 2026-11-27: nao existe limite de tempo aqui. A conta anterior misturava o relogio do
       // navegador com o started_ts do servidor e estourava no primeiro tick quando os dois diferiam
       // mais que 60 s, apagando uma varredura que o servidor ja tinha concluido. Quem encerra o
       // scan e o state que o servidor devolve: runScan fecha em 'done' ou 'error' em todo caminho
       // (server/api/devices.js), e a faixa tem teto de 1024 IPs com timeout proprio por sonda.
-      if (stopped || busy) return; // scan ja fechado neste efeito, ou o status do ciclo anterior ainda em voo (F3)
-      busy = true;
+      if (stopped || p.statusInFlight || p.owner !== id) return; // um status por vez; um scan novo ja pegou a tabela
+      p.statusInFlight = true;
       try {
         const s = await api.scanStatus(id);
-        busy = false; // F3: um request de status por vez; a fase de results segue ordenada por emissor (F1)
-        if (cancelled || stopped) return; // conclusao obsoleta: scan fechado, descarta
+        p.statusInFlight = false;
+        if (cancelled || stopped || p.owner !== id) return; // conclusao obsoleta: scan fechado, descarta
         if (s.state !== 'running') {
           // review round 2: o state terminal vale NA MESMA hora, antes de esperar as results (o
-          // request separado pode travar para sempre) e com stopped fechado para ticks obsoletos
+          // request separado pode travar para sempre). terminalError congela o erro do servidor:
+          // nenhuma escrita de results posterior o toca
           stopped = true;
+          p.terminalError = s.state === 'error';
           setJob(s);
           setError(s.state === 'error' ? (s.error || t('errors.scan_failed')) : null);
         }
-        // as results continuam best-effort: se cairem, o aviso diz por que; se pendurarem, o state
-        // terminal ja foi aplicado e nada depende delas
-        let aviso: string | null = null;
-        try { await loadResults(id); } catch (e) { aviso = `warning: ${errorMessage(e, t('errors.action_failed'))}`; }
-        // review final (F2): o aviso da request de results pertence ao SCAN ATUAL, nao ao efeito — a
-        // request final pode falar depois do done ter desmontado o efeito. Nunca encobre o erro de
-        // scan do servidor e nunca reabre polling (o setJob do estado terminal ja foi feito)
-        if (scanOwner.current === id && s.state !== 'error') setError(aviso);
+        // as results continuam best-effort; em 'running' emite-se uma por dono (uma pendurada nao
+        // acumula snapshots), e a proxima EMISSAO (terminal ou reload) substitui a antiga pelo seq
+        if (s.state !== 'running' || !p.resultsInFlight) await loadResults(id);
         if (cancelled) return;
         if (s.state === 'running' && !stopped) setJob(s);
-      } catch (e) { busy = false; if (!cancelled && !stopped) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
+      } catch (e) { p.statusInFlight = false; if (!cancelled && !stopped && p.owner === id) setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
     };
     const timer = setInterval(tick, 2000);
     return () => { cancelled = true; clearInterval(timer); };
@@ -156,7 +169,7 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
         ...(target.scheme === 'rtsp' ? { source: target.source } : {}) } };
       if (credentials.login && credentials.password) body.credential = { username: credentials.login, password: credentials.password };
       const s = await api.startScan(body);
-      scanOwner.current = s.scan_id; setScanId(s.scan_id); setResults([]);
+      takeTable(s.scan_id); setScanId(s.scan_id); setResults([]);
       setJob({ ...s, id: s.scan_id });
     } catch (e) { setError(errorMessage(e, t('errors.action_failed'))); }
   }
@@ -169,7 +182,7 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
       const body: ScanBody = { kind: 'scan', scope: { ips } };
       if (credentials.login && credentials.password) body.credential = { username: credentials.login, password: credentials.password };
       const s = await api.startScan(body);
-      scanOwner.current = s.scan_id; setScanId(s.scan_id); setResults([]);
+      takeTable(s.scan_id); setScanId(s.scan_id); setResults([]);
       setJob({ ...s, id: s.scan_id });
     } catch (e) { setError(errorMessage(e, t('errors.action_failed'))); }
   }
@@ -227,8 +240,9 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
     }
     setSummary({ ok, fail }); setSelected({}); setBusy(false);
     // ponytail: re-read from the server (it is the one that marks outcome 'added'), but only what the
-    // current scan found
-    try { await loadResults(scanId); } catch (e) { setError(errorMessage(e, t('errors.action_failed'))); }
+    // current scan found — if another scan took the table while the add ran, loadResults drops the
+    // reload before it issues (the add of a dead scan must not steal the table from the live one)
+    await loadResults(scanId);
   }
 
   // ponytail: narrow Port + "Default" on the same row, like NX; both tabs use the same pair
