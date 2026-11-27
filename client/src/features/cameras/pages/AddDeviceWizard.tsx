@@ -50,6 +50,11 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   const [job, setJob] = useState<ScanJob | null>(null);
   // ponytail: only the CURRENT scan fills the table; the server catalog is never listed raw
   const [scanId, setScanId] = useState<string | null>(null);
+  // review round 3: the scan that OWNS the table. The results write lands only while the id it was
+  // fetched for is still the current scan: the final response of scan A arriving after scan B started
+  // is stale and must not show/select A's devices inside B (effect cleanup cannot guard this — the
+  // fetch outlives the effect that started it)
+  const scanOwner = useRef<string | null>(null);
   const [results, setResults] = useState<Discovery[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [rows, setRows] = useState<Record<string, RowState>>({});
@@ -79,7 +84,10 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
   const noChannelSelected = selectedCandidates.some((r) => channels[r.id]?.list && (channels[r.id]?.marked.length ?? 0) === 0);
 
   // ponytail: the server keeps EVERY discovery of the instance; the table shows only the current scan
-  const loadResults = async (id: string | null) => setResults(resultsForScan(await api.discoveryResults(), id));
+  const loadResults = async (id: string | null) => {
+    const rows = resultsForScan(await api.discoveryResults(), id);
+    if (scanOwner.current === id) setResults(rows); // um scan mais novo e o response e velho: nao escreve
+  };
 
   // (c1) async scan poll: every tick swaps the job object and the effect restarts the timer
   useEffect(() => {
@@ -136,7 +144,7 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
         ...(target.scheme === 'rtsp' ? { source: target.source } : {}) } };
       if (credentials.login && credentials.password) body.credential = { username: credentials.login, password: credentials.password };
       const s = await api.startScan(body);
-      setScanId(s.scan_id); setResults([]);
+      scanOwner.current = s.scan_id; setScanId(s.scan_id); setResults([]);
       setJob({ ...s, id: s.scan_id });
     } catch (e) { setError(errorMessage(e, t('errors.action_failed'))); }
   }
@@ -149,7 +157,7 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
       const body: ScanBody = { kind: 'scan', scope: { ips } };
       if (credentials.login && credentials.password) body.credential = { username: credentials.login, password: credentials.password };
       const s = await api.startScan(body);
-      setScanId(s.scan_id); setResults([]);
+      scanOwner.current = s.scan_id; setScanId(s.scan_id); setResults([]);
       setJob({ ...s, id: s.scan_id });
     } catch (e) { setError(errorMessage(e, t('errors.action_failed'))); }
   }

@@ -461,15 +461,16 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
     vi.useRealTimers();
   }, 15_000);
 
-  // REVIEW ROUND 2 (2): a janela entre a RESPOSTA done e o RENDER do state terminal. 'cancelled' so
-  // existe depois da cleanup (que roda no commit); um 'running' obsoleto que resolve nessa janela
-  // passava por ela e, aplicado por ultimo, VENCE o batch do React: running ganha e o scan reacende.
+  // REVIEW ROUND 2 (2) + ROUND 3 (OPEN 1): a janela entre a RESPOSTA done e o RENDER do state
+  // terminal. 'cancelled' so existe depois da cleanup, que roda no commit; o 'running' obsoleto que
+  // resolve ANTES de qualquer commit passa por ela e, aplicado por ultimo, VENCE o batch do React:
+  // running ganha e o scan reacende. O obsoleto e liberado SINCRONAMENTE dentro da chamada de
+  // results do tick do done — o MESMO macrotask da resposta done, onde commit/cleanup nao podem
+  // existir: quem descarta o obsoleto so pode ser a flag sincronica (stopped).
   it('o running obsoleto que chega entre a resposta done e o commit terminal nao reaceso o scan', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let calls = 0;
-    let tick2WaitingResults = false;
-    let releaseTick2Results: (rows: unknown[]) => void = () => {};
-    const tick2Results = new Promise<unknown[]>((r) => { releaseTick2Results = r; });
+    let staleReleased = false;
     let resolveSlow: (v: ScanStatus) => void = () => {};
     const slowRunning = new Promise<ScanStatus>((r) => { resolveSlow = r; });
     openSubnetScan(
@@ -479,23 +480,66 @@ describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
         return { id: 's1', state: 'done', started_ts: '' }; // tick 2: o servidor encerrou o scan
       },
       () => {
-        // as results do tick 2 ficam na mao: e a alavanca que poe o running obsoleto exatamente na
-        // janela entre a resposta done (microtask) e o commit do terminal (macrotask)
-        if (calls >= 2) { tick2WaitingResults = true; return tick2Results; }
+        // results do tick do done: e aqui (sincrono, antes de qualquer await) que o obsoleto entra
+        // na janela — sem nenhum macrotask entre a resposta done e a conclusao atrasada
+        if (calls >= 2 && !staleReleased) {
+          staleReleased = true;
+          resolveSlow({ id: 's1', state: 'running', started_ts: '' });
+        }
         return [CAMERA_ROW];
       },
     );
     await waitFor(() => expect(calls).toBe(1), { timeout: 4000 });
-    await vi.advanceTimersByTimeAsync(2000);       // tick 2 (fake 4 s) ve o done
-    expect(tick2WaitingResults).toBe(true);        // ... e ainda espera as results
-    // ordem deterministica da janela: as results do done liberam o setJob(done) no microtask e o
-    // running obsoleto entra no MESMO macrotask, antes de qualquer commit
-    releaseTick2Results([CAMERA_ROW]);
-    resolveSlow({ id: 's1', state: 'running', started_ts: '' });
-    await new Promise((r) => realSetTimeout(r, 20));            // commit dos dois updates
+    await vi.advanceTimersByTimeAsync(2000);        // tick 2 ve o done; o obsoleto cai na MESMA hora
+    await new Promise((r) => realSetTimeout(r, 20));            // commit dos updates pendentes
     await vi.advanceTimersByTimeAsync(20_000);
     expect(calls).toBe(2);                                       // o obsoleto foi descartado: nada reaceso
     expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    vi.useRealTimers();
+  }, 15_000);
+
+  // REVIEW ROUND 3 (OPEN 2): o operador inicia o scan B enquanto a primeira request de results do
+  // scan A (ja terminal) segue em voo. A resposta de A que chega depois de B escreve na tabela:
+  // sem o dono da tabela, os dispositivos de A aparecem (e ficam selecionaveis) dentro de B.
+  it('a resposta atrasada das results do scan A nao escreve na tabela do scan B', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const A_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554], status: 'rtsp', scan_id: 's1', outcome: 'pending' };
+    const B_ROW = { id: '10.0.0.9|554', ip: '10.0.0.9', openPorts: [554], status: 'rtsp', scan_id: 's2', outcome: 'pending' };
+    let started = 0;
+    let bStatus = 0;
+    let aHeld = false;
+    let releaseA: (rows: unknown[]) => void = () => {};
+    const aPending = new Promise<unknown[]>((r) => { releaseA = r; });
+    const apiMix = {
+      startScan: async () => { started += 1; return { scan_id: started === 1 ? 's1' : 's2', state: 'running', started_ts: '' }; },
+      scanStatus: async () => {
+        if (started === 1) return { id: 's1', state: 'done', started_ts: '' };  // A fecha no primeiro tick
+        bStatus += 1;
+        return { id: 's2', state: bStatus === 1 ? 'running' : 'done', started_ts: '' }; // B fecha no 2o
+      },
+      discoveryResults: async () => {
+        if (!aHeld) { aHeld = true; return aPending; }  // a FINAL request de A fica em voo
+        return started === 1 ? [A_ROW] : [B_ROW];
+      },
+      addCamera: async () => ({ id: 'c1', name: 'C', state: 'provisioning', profile_ids: [] }),
+      deviceChannels: async () => ({ multichannel: false, sources: 1, channels: [] }),
+    };
+    renderWizard(<AddDeviceWizard api={apiMix as never} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Subnet scan' }));
+    fireEvent.change(screen.getByLabelText('First IP'), { target: { value: '10.69.36.50' } });
+    fireEvent.change(screen.getByLabelText('Last IP'), { target: { value: '10.69.36.50' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }));   // scan A
+    // o tick 1 do A aplica o done e deixa a FINAL request de results em voo (aHeld e a prova)
+    await waitFor(() => expect(aHeld).toBe(true), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scan' })).toBeEnabled(), { timeout: 3000 });
+    fireEvent.click(screen.getByRole('button', { name: 'Scan' }));   // scan B com a request de A pendente
+    await waitFor(() => expect(bStatus).toBe(1), { timeout: 5000 }); // tick 1 do B rodou
+    await waitFor(() => expect(screen.getByText('10.0.0.9:554')).toBeInTheDocument(), { timeout: 3000 });
+    releaseA([A_ROW]);                                               // a resposta final de A chega DEPOIS de B
+    await new Promise((r) => realSetTimeout(r, 50));                 // macrotasks reais: o commit da escrita atrasada, se houver
+    await new Promise((r) => realSetTimeout(r, 50));
+    expect(screen.queryByText('10.69.36.56:554')).not.toBeInTheDocument(); // A jamais escreve na tabela de B
+    expect(screen.getByText('10.0.0.9:554')).toBeInTheDocument();
     vi.useRealTimers();
   }, 15_000);
 });
