@@ -191,7 +191,6 @@ export const en = {
   'cameras.discovery.added': 'Added',
   'cameras.discovery.no_stream': 'no stream',
   'cameras.discovery.row_error': 'Could not read this device',
-  'cameras.discovery.scan_timeout': 'Scan took too long (60 s)',
   'cameras.discovery.warning_prefix': 'Warning',
 
   // manufacturer modal

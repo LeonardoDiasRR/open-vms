@@ -192,7 +192,6 @@ export const ptBR: Record<MessageKey, string> = {
   'cameras.discovery.added': 'Adicionado',
   'cameras.discovery.no_stream': 'sem stream',
   'cameras.discovery.row_error': 'Falha ao ler este dispositivo',
-  'cameras.discovery.scan_timeout': 'A varredura demorou demais (60 s)',
   'cameras.discovery.warning_prefix': 'Aviso',
 
   // manufacturer modal
