@@ -24,7 +24,7 @@ type TabId = 'known' | 'subnet';
 type Fields = { address: string; port: string; useDefault: boolean; start: string; end: string };
 type Credentials = { login: string; password: string };
 // Asynchronous scan state: the poll swaps the object on every tick (and restarts the effect timer).
-type ScanJob = { id: string; state: string; started_ts: string; error?: string; found?: number };
+type ScanJob = { id: string; state: string; error?: string; found?: number };
 type RowState = { state: 'adding' | 'ok' | 'error'; message?: string };
 // Body of POST /api/v1/discovery/scan.
 type ScanBody = { kind: 'scan'; scope: { ips: string[]; ports?: number[] }; credential?: { username: string; password: string } };
@@ -86,14 +86,17 @@ export default function AddDeviceWizard({ api, onClose }: Props) {
     if (job?.state !== 'running' || !job.id) return undefined;
     const id = job.id;
     const tick = async () => {
-      // missing key: cameras.discovery.scan_timeout (inline English until the consolidation)
-      if (Date.now() - Date.parse(job.started_ts) > 60000) { setJob(null); return setError('scan took too long (60s)'); }
+      // 2026-11-27: nao existe limite de tempo aqui. A conta anterior misturava o relogio do
+      // navegador com o started_ts do servidor e estourava no primeiro tick quando os dois diferiam
+      // mais que 60 s, apagando uma varredura que o servidor ja tinha concluido. Quem encerra o
+      // scan e o state que o servidor devolve: runScan fecha em 'done' ou 'error' em todo caminho
+      // (server/api/devices.js), e a faixa tem teto de 1024 IPs com timeout proprio por sonda.
       try {
         const s = await api.scanStatus(id);
         await loadResults(id);
         setJob(s); setError(null);
         if (s.state === 'error') setError(s.error || t('errors.scan_failed'));
-      } catch (e) { setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // ponytail: network went down -> warning and keep trying until the limit
+      } catch (e) { setError(`warning: ${errorMessage(e, t('errors.action_failed'))}`); } // network caiu -> aviso e continua; o scan no servidor segue
     };
     const timer = setInterval(tick, 2000);
     return () => clearInterval(timer);

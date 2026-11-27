@@ -340,3 +340,52 @@ describe('AddDeviceWizard: busca com URL de canal envia scope.source', () => {
       .toBe('rtsp://10.95.7.30:8555/81f5a2dd-09a8-482e-acc6-3d385aa017bf');
   });
 });
+
+// PLANO 2026-11-27: o guarda de 60 s media Date.now() - Date.parse(started_ts), isto e, dois relogios
+// de maquinas diferentes. Com o relogio do navegador seis minutos a frente, o primeiro tick ja
+// estourava, apagava o job e a tabela ficava vazia embora o servidor tivesse sete cameras. O
+// servidor devolve started_ts deslocado de proposito: o wizard nao deve mais ler esse campo.
+const SKEW_MS = 6 * 60 * 1000;
+const CAMERA_ROW = { id: '10.69.36.56|554', ip: '10.69.36.56', openPorts: [554], status: 'rtsp', scan_id: 's1', outcome: 'pending' };
+
+function openSubnetScan(status: () => { id: string; state: string; started_ts: string }) {
+  const apiSkew = {
+    startScan: async () => ({
+      scan_id: 's1', state: 'running',
+      started_ts: new Date(Date.now() - SKEW_MS).toISOString(),
+    }),
+    scanStatus: async () => status(),
+    discoveryResults: async () => [CAMERA_ROW],
+    addCamera: async () => ({ id: 'c1', name: 'C', state: 'provisioning', profile_ids: [] }),
+    deviceChannels: async () => ({ multichannel: false, sources: 1, channels: [] }),
+  };
+  renderWizard(<AddDeviceWizard api={apiSkew as never} onClose={() => {}} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Subnet scan' }));
+  fireEvent.change(screen.getByLabelText('First IP'), { target: { value: '10.69.36.50' } });
+  fireEvent.change(screen.getByLabelText('Last IP'), { target: { value: '10.69.36.50' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Scan' }));
+}
+
+describe('AddDeviceWizard: sem limite de tempo na varredura', () => {
+  it('mostra a camera encontrada mesmo com o servidor seis minutos atras', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    openSubnetScan(() => ({ id: 's1', state: 'done', started_ts: '' }));
+    await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
+    expect(screen.queryByText(/took too long|demorou demais/i)).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('depois de dois minutos de scan lento segue esperando, sem aviso e sem esvaziar a tabela', async () => {
+    let calls = 0;
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    openSubnetScan(() => { calls += 1; return { id: 's1', state: 'running', started_ts: '' }; });
+    await waitFor(() => expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument(), { timeout: 4000 });
+    await vi.advanceTimersByTimeAsync(122_000);
+    expect(screen.queryByText(/took too long|demorou demais/i)).not.toBeInTheDocument();
+    expect(screen.getByText('10.69.36.56:554')).toBeInTheDocument();
+    const before = calls;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(calls).toBeGreaterThan(before);   // o polling continua vivo: quem encerra o scan e o servidor
+    vi.useRealTimers();
+  });
+});
