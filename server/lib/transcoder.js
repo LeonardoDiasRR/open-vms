@@ -88,7 +88,9 @@ function createTranscoder({ cacheRoot: cacheRoot, execFile = nativeExecFile, ffp
     probing = (async () => {
     // 2 testsrc frames per candidate: the first rc 0 wins (the GPU answers or the codec does not exist).
     const probe = (enc) => {
-      const args = transcodeCommand({ encoder: enc, source: 'testsrc=size=128x72:rate=30:duration=1',
+      // NVENC recusa quadros abaixo do mínimo suportado (128x72 falhava e o probe nunca passava
+      // no nvenc mesmo com GPU sadia — medido 2026-11-27 no host openvms): use 320x240.
+      const args = transcodeCommand({ encoder: enc, source: 'testsrc=size=320x240:rate=30:duration=1',
         sourceAnchor: 0, ini: 0, fim: 1, fps: 30, dest: '-', threads: 1 });
       const input = args.indexOf('-i'); args.splice(input, 0, '-f', 'lavfi');
       args.splice(args.indexOf('-f', args.indexOf('-an')), 2, '-f', 'null');
